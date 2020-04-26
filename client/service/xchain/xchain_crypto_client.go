@@ -9,6 +9,7 @@ import (
 	"github.com/xuperchain/crypto/core/account"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/ecies"
+	"github.com/xuperchain/crypto/core/hash"
 	"github.com/xuperchain/crypto/core/hdwallet/key"
 	"github.com/xuperchain/crypto/core/multisign"
 	"github.com/xuperchain/crypto/core/schnorr_ring_sign"
@@ -23,6 +24,22 @@ import (
 
 type XchainCryptoClient struct {
 }
+
+// --- 哈希算法相关 start ---
+
+// 使用SHA256做单次哈希运算
+func (xcc *XchainCryptoClient) HashUsingSha256(data []byte) []byte {
+	hashResult := hash.HashUsingSha256(data)
+	return hashResult
+}
+
+// 使用SHA256做双次哈希运算，担心SHA256存在后门时可以这么做
+func (xcc *XchainCryptoClient) HashUsingDoubleSha256(data []byte) []byte {
+	hashResult := hash.DoubleSha256(data)
+	return hashResult
+}
+
+// --- 哈希算法相关 end ---
 
 // 产生随机熵
 func (xcc *XchainCryptoClient) GenerateEntropy(bitSize int) ([]byte, error) {
