@@ -16,6 +16,10 @@ import (
 
 func main() {
 	xcc := new(xchain.XchainCryptoClient)
+
+	hashResult := xcc.HashUsingSha256([]byte("This is xchain crypto"))
+	log.Printf("Hash result for [This is xchain crypto] is: %s", hashResult)
+
 	ecdsaAccount, err := xcc.CreateNewAccountWithMnemonic(rand.SimplifiedChinese, account.StrengthHard)
 	if err != nil {
 		log.Printf("CreateNewAccountWithMnemonic failed and err is: %v", err)
