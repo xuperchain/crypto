@@ -39,13 +39,31 @@ func (xcc *XchainCryptoClient) HashUsingDoubleSha256(data []byte) []byte {
 	return hashResult
 }
 
+// 使用Hmac512做单次哈希运算
+func (xcc *XchainCryptoClient) HashUsingHmac512(data, key []byte) []byte {
+	hashResult := hash.HashUsingHmac512(data, key)
+	return hashResult
+}
+
+// 使用Ripemd160做单次哈希运算
+func (xcc *XchainCryptoClient) HashUsingRipemd160(data []byte) []byte {
+	hashResult := hash.HashUsingRipemd160(data)
+	return hashResult
+}
+
 // --- 哈希算法相关 end ---
+
+// --- 随机数相关 start ---
 
 // 产生随机熵
 func (xcc *XchainCryptoClient) GenerateEntropy(bitSize int) ([]byte, error) {
 	entropyByte, err := walletRand.GenerateEntropy(bitSize)
 	return entropyByte, err
 }
+
+// --- 随机数相关 end ---
+
+// --- 助记词相关 start ---
 
 // 将随机熵转为助记词
 func (xcc *XchainCryptoClient) GenerateMnemonic(entropy []byte, language int) (string, error) {
@@ -59,6 +77,10 @@ func (xcc *XchainCryptoClient) GenerateSeedWithErrorChecking(mnemonic string, pa
 	return seed, err
 }
 
+// --- 助记词相关 end ---
+
+// --- 密钥字符串转换相关 start ---
+
 // 获取ECC私钥的json格式的表达
 func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
 	jsonEcdsaPrivateKeyJsonFormat, err := account.GetEcdsaPrivateKeyJsonFormat(k)
@@ -71,6 +93,8 @@ func (xcc *XchainCryptoClient) GetEcdsaPublicKeyJsonFormat(k *ecdsa.PrivateKey) 
 	return jsonEcdsaPublicKeyJsonFormat, err
 }
 
+// --- 密钥字符串转换相关 end ---
+
 // --- 地址生成相关 start ---
 
 // 使用单个公钥来生成钱包地址
@@ -79,7 +103,7 @@ func (xcc *XchainCryptoClient) GetAddressFromPublicKey(key *ecdsa.PublicKey) (st
 	return address, err
 }
 
-// 使用多个公钥来生成钱包地址
+// 使用多个公钥来生成钱包地址（环签名，多重签名地址）
 func (xcc *XchainCryptoClient) GetAddressFromPublicKeys(keys []*ecdsa.PublicKey) (string, error) {
 	address, err := account.GetAddressFromPublicKeys(keys)
 	return address, err
@@ -97,13 +121,15 @@ func (xcc *XchainCryptoClient) VerifyAddressUsingPublicKey(address string, pub *
 	return isValid, nVersion
 }
 
-// 验证钱包地址是否和指定的公钥数组match。如果成功，返回true和对应的版本号；如果失败，返回false和默认的版本号0
+// 验证钱包地址（环签名，多重签名地址）是否和指定的公钥数组match。如果成功，返回true和对应的版本号；如果失败，返回false和默认的版本号0
 func (xcc *XchainCryptoClient) VerifyAddressUsingPublicKeys(address string, pub []*ecdsa.PublicKey) (bool, uint8) {
 	isValid, nVersion := account.VerifyAddressUsingPublicKeys(address, pub)
 	return isValid, nVersion
 }
 
 // --- 地址生成相关 end ---
+
+// --- 账户相关 start ---
 
 // 通过随机数种子来生成椭圆曲线加密所需要的公钥和私钥
 func (xcc *XchainCryptoClient) GenerateKeyBySeed(seed []byte) (*ecdsa.PrivateKey, error) {
@@ -112,55 +138,13 @@ func (xcc *XchainCryptoClient) GenerateKeyBySeed(seed []byte) (*ecdsa.PrivateKey
 	return privateKey, err
 }
 
-//// 获取ECC私钥的json格式的表达
-//func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
-//	jsonEcdsaPrivateKeyJsonFormat, err := account.GetEcdsaPrivateKeyJsonFormat(k)
-//	return jsonEcdsaPrivateKeyJsonFormat, err
-//}
-//
-//// 获取ECC公钥的json格式的表达
-//func (xcc *XchainCryptoClient) GetEcdsaPublicKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
-//	jsonEcdsaPublicKeyJsonFormat, err := account.GetEcdsaPublicKeyJsonFormat(k)
-//	return jsonEcdsaPublicKeyJsonFormat, err
-//}
-
-// 使用ECC私钥来签名
-func (xcc *XchainCryptoClient) SignECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
-	signature, err := sign.SignECDSA(k, msg)
-	return signature, err
-}
-
-// 使用ECC私钥来签名，生成统一签名的新签名函数
-func (xcc *XchainCryptoClient) SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
-	signature, err := sign.SignV2ECDSA(k, msg)
-	return signature, err
-}
-
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数
-func (xcc *XchainCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
-	result, err := sign.VerifyECDSA(k, signature, msg)
-	return result, err
-}
-
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数
-func (xcc *XchainCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
-	result, err := sign.VerifyV2ECDSA(k, signature, msg)
-	return result, err
-}
-
-//// 使用公钥来生成钱包地址
-//func (xcc *XchainCryptoClient) GetAddressFromPublicKey(nVersion uint8, pub *ecdsa.PublicKey) string {
-//	address := account.GetAddressFromPublicKey(nVersion, pub)
-//	return address
-//}
-
 // ExportNewAccount 创建新账户(不使用助记词，不推荐使用)
 func (xcc *XchainCryptoClient) ExportNewAccount(path string) error {
-	lowLevelPrivateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
 	}
-	return account.ExportNewAccount(path, lowLevelPrivateKey)
+	return account.ExportNewAccount(path, privateKey)
 }
 
 // 创建含有助记词的新的账户，返回的字段：（助记词、私钥的json、公钥的json、钱包地址） as ECDSAAccount，以及可能的错误信息
@@ -232,6 +216,42 @@ func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecds
 	return ecdsaPublicKey, err
 }
 
+// 从私钥内容产生私钥
+func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromJson(jsonBytes []byte) (*ecdsa.PrivateKey, error) {
+	return account.GetEcdsaPrivateKeyFromJson(jsonBytes)
+}
+
+// 从公钥内容产生公钥
+func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromJson(jsonBytes []byte) (*ecdsa.PublicKey, error) {
+	return account.GetEcdsaPublicKeyFromJson(jsonBytes)
+}
+
+// --- 账户相关 end ---
+
+// 使用ECC私钥来签名
+func (xcc *XchainCryptoClient) SignECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
+	signature, err := sign.SignECDSA(k, msg)
+	return signature, err
+}
+
+// 使用ECC私钥来签名，生成统一签名的新签名函数
+func (xcc *XchainCryptoClient) SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
+	signature, err := sign.SignV2ECDSA(k, msg)
+	return signature, err
+}
+
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数
+func (xcc *XchainCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
+	result, err := sign.VerifyECDSA(k, signature, msg)
+	return result, err
+}
+
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数
+func (xcc *XchainCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
+	result, err := sign.VerifyV2ECDSA(k, signature, msg)
+	return result, err
+}
+
 // 使用椭圆曲线非对称加密
 func (xcc *XchainCryptoClient) EncryptByEcdsaKey(publicKey *ecdsa.PublicKey, msg []byte) (cypherText []byte, err error) {
 	cypherText, err = ecies.Encrypt(publicKey, msg)
@@ -242,16 +262,6 @@ func (xcc *XchainCryptoClient) EncryptByEcdsaKey(publicKey *ecdsa.PublicKey, msg
 func (xcc *XchainCryptoClient) DecryptByEcdsaKey(privateKey *ecdsa.PrivateKey, cypherText []byte) (msg []byte, err error) {
 	msg, err = ecies.Decrypt(privateKey, cypherText)
 	return msg, err
-}
-
-// 从导出的私钥文件读取私钥
-func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromJson(jsonBytes []byte) (*ecdsa.PrivateKey, error) {
-	return account.GetEcdsaPrivateKeyFromJson(jsonBytes)
-}
-
-// 从导出的公钥文件读取公钥
-func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromJson(jsonBytes []byte) (*ecdsa.PublicKey, error) {
-	return account.GetEcdsaPublicKeyFromJson(jsonBytes)
 }
 
 // 使用AES对称加密算法加密

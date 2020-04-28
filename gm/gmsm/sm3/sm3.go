@@ -195,5 +195,12 @@ func (sm3 *SM3) Sum(in []byte) []byte {
 		binary.BigEndian.PutUint32(out[i*4:], sm3.digest[i])
 	}
 	return out
+}
 
+func Sm3Sum(data []byte) []byte {
+	var sm3 SM3
+
+	sm3.Reset()
+	sm3.Write(data)
+	return sm3.Sum(nil)
 }
