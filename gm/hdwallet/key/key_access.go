@@ -11,11 +11,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/xuperchain/crypto/core/account"
-	"github.com/xuperchain/crypto/core/ecies"
-	"github.com/xuperchain/crypto/core/hash"
+	"github.com/xuperchain/crypto/gm/account"
+	"github.com/xuperchain/crypto/gm/ecies"
+	"github.com/xuperchain/crypto/gm/hash"
 
-	aesUtil "github.com/xuperchain/crypto/core/aes"
+	aesUtil "github.com/xuperchain/crypto/gm/aes"
 )
 
 func GetBinaryEcdsaPrivateKeyFromFile(path string, password string) ([]byte, error) {
@@ -27,7 +27,8 @@ func GetBinaryEcdsaPrivateKeyFromFile(path string, password string) ([]byte, err
 	}
 
 	// 将aes对称加密的密钥扩展至32字节
-	newPassword := hash.DoubleSha256([]byte(password))
+	//	newPassword := hash.DoubleSha256([]byte(password))
+	newPassword := hash.HashUsingSM3([]byte(password))
 
 	originalContent, err := aesUtil.Decrypt(content, newPassword)
 	if err != nil {
@@ -41,7 +42,8 @@ func GetBinaryEcdsaPrivateKeyFromFile(path string, password string) ([]byte, err
 // GetBinaryEcdsaPrivateKeyFromString通过二进制字符串获取真实私钥的字节数组
 func GetBinaryEcdsaPrivateKeyFromString(encryptPrivateKey string, password string) ([]byte, error) {
 	// 将aes对称加密的密钥扩展至32字节
-	newPassword := hash.DoubleSha256([]byte(password))
+	//	newPassword := hash.DoubleSha256([]byte(password))
+	newPassword := hash.HashUsingSM3([]byte(password))
 
 	originalContent, err := aesUtil.Decrypt([]byte(encryptPrivateKey), newPassword)
 	if err != nil {
@@ -142,7 +144,8 @@ func GetAccountFromLocal(path string) (*account.ECDSAAccountToCloud, error) {
 // EncryptByKey 加密
 func EncryptByKey(info string, key string) (string, error) {
 	// 将aes对称加密的密钥扩展至32字节
-	newPassword := hash.DoubleSha256([]byte(key))
+	//	newPassword := hash.DoubleSha256([]byte(key))
+	newPassword := hash.HashUsingSM3([]byte(key))
 
 	// 加密info
 	cipherInfo, err := aesUtil.Encrypt([]byte(info), newPassword)
@@ -155,7 +158,8 @@ func EncryptByKey(info string, key string) (string, error) {
 // DecryptByKey 解密
 func DecryptByKey(cipherInfo string, key string) (string, error) {
 	// 将aes对称加密的密钥扩展至32字节
-	newPassword := hash.DoubleSha256([]byte(key))
+	//	newPassword := hash.DoubleSha256([]byte(key))
+	newPassword := hash.HashUsingSM3([]byte(key))
 
 	// 解密cipherInfo
 	info, err := aesUtil.Decrypt([]byte(cipherInfo), newPassword)

@@ -28,7 +28,7 @@ func main() {
 	log.Printf("mnemonic is %v, jsonPrivateKey is %v, jsonPublicKey is %v and address is %v", ecdsaAccount.Mnemonic, ecdsaAccount.JsonPrivateKey, ecdsaAccount.JsonPublicKey, ecdsaAccount.Address)
 
 	strJsonPrivateKey := ecdsaAccount.JsonPrivateKey
-	originalPrivateKey, err := xcc.GetEcdsaPrivateKeyFromJson([]byte(strJsonPrivateKey))
+	originalPrivateKey, err := xcc.GetEcdsaPrivateKeyFromJsonStr(strJsonPrivateKey)
 
 	// 从助记词恢复账户
 	ecdsaAccount, err = xcc.RetrieveAccountByMnemonic(ecdsaAccount.Mnemonic, rand.SimplifiedChinese)
@@ -52,7 +52,7 @@ func main() {
 	// 使用椭圆曲线私钥来签名
 	msg := []byte("Welcome to the world of super chain using NIST.")
 	strJsonPrivateKey = ecdsaAccount.JsonPrivateKey
-	privateKey, err := xcc.GetEcdsaPrivateKeyFromJson([]byte(strJsonPrivateKey))
+	privateKey, err := xcc.GetEcdsaPrivateKeyFromJsonStr(strJsonPrivateKey)
 	// 保留第1个NIST的privateKey
 	privateKey1 := privateKey
 
