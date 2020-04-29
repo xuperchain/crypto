@@ -81,16 +81,28 @@ func (xcc *XchainCryptoClient) GenerateSeedWithErrorChecking(mnemonic string, pa
 
 // --- 密钥字符串转换相关 start ---
 
-// 获取ECC私钥的json格式的表达
-func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
+// 获取ECC私钥的json格式的表达的字符串
+func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyJsonFormatStr(k *ecdsa.PrivateKey) (string, error) {
 	jsonEcdsaPrivateKeyJsonFormat, err := account.GetEcdsaPrivateKeyJsonFormat(k)
 	return jsonEcdsaPrivateKeyJsonFormat, err
 }
 
-// 获取ECC公钥的json格式的表达
-func (xcc *XchainCryptoClient) GetEcdsaPublicKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
+// 获取ECC公钥的json格式的表达的字符串
+func (xcc *XchainCryptoClient) GetEcdsaPublicKeyJsonFormatStr(k *ecdsa.PrivateKey) (string, error) {
 	jsonEcdsaPublicKeyJsonFormat, err := account.GetEcdsaPublicKeyJsonFormat(k)
 	return jsonEcdsaPublicKeyJsonFormat, err
+}
+
+// 从json格式私钥内容字符串产生ECC私钥
+func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromJsonStr(keyStr string) (*ecdsa.PrivateKey, error) {
+	jsonBytes := []byte(keyStr)
+	return account.GetEcdsaPrivateKeyFromJson(jsonBytes)
+}
+
+// 从json格式公钥内容字符串产生ECC公钥
+func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromJsonStr(keyStr string) (*ecdsa.PublicKey, error) {
+	jsonBytes := []byte(keyStr)
+	return account.GetEcdsaPublicKeyFromJson(jsonBytes)
 }
 
 // --- 密钥字符串转换相关 end ---
@@ -198,9 +210,15 @@ func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromFileByPassword(path string,
 	return ecdsaPrivateKey, err
 }
 
-// 从二进制加密字符串获取真实私钥的byte格式
-func (xcc *XchainCryptoClient) GetBinaryEcdsaPrivateKeyFromString(encryptPrivateKey string, password string) ([]byte, error) {
-	binaryEcdsaPrivateKey, err := key.GetBinaryEcdsaPrivateKeyFromString(encryptPrivateKey, password)
+// 使用支付密码从二进制加密字符串获取真实私钥的字节数组
+func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyBytesFromEncryptedStringByPassword(encryptedPrivateKey string, password string) ([]byte, error) {
+	binaryEcdsaPrivateKey, err := key.GetBinaryEcdsaPrivateKeyFromString(encryptedPrivateKey, password)
+	return binaryEcdsaPrivateKey, err
+}
+
+// 使用支付密码从二进制加密字符串获取真实ECC私钥
+func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromEncryptedStringByPassword(encryptedPrivateKey string, password string) (*ecdsa.PrivateKey, error) {
+	binaryEcdsaPrivateKey, err := key.GetEcdsaPrivateKeyFromString(encryptedPrivateKey, password)
 	return binaryEcdsaPrivateKey, err
 }
 
@@ -214,16 +232,6 @@ func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromFile(filename string) (*ecd
 func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecdsa.PublicKey, error) {
 	ecdsaPublicKey, err := account.GetEcdsaPublicKeyFromFile(filename)
 	return ecdsaPublicKey, err
-}
-
-// 从私钥内容产生私钥
-func (xcc *XchainCryptoClient) GetEcdsaPrivateKeyFromJson(jsonBytes []byte) (*ecdsa.PrivateKey, error) {
-	return account.GetEcdsaPrivateKeyFromJson(jsonBytes)
-}
-
-// 从公钥内容产生公钥
-func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromJson(jsonBytes []byte) (*ecdsa.PublicKey, error) {
-	return account.GetEcdsaPublicKeyFromJson(jsonBytes)
 }
 
 // --- 账户相关 end ---
