@@ -10,6 +10,7 @@ NIST系列算法请引用：
 详细函数说明请参考该类的函数注释
 
 使用例子：
+```
 import (
 	"log"
 
@@ -27,6 +28,7 @@ if err != nil {
 }
 
 log.Printf("mnemonic is %v, jsonPrivateKey is %v, jsonPublicKey is %v and address is %v", ecdsaAccount.Mnemonic, ecdsaAccount.JsonPrivateKey, ecdsaAccount.JsonPublicKey, ecdsaAccount.Address)
+```
 
 ------
 
@@ -36,6 +38,7 @@ log.Printf("mnemonic is %v, jsonPrivateKey is %v, jsonPublicKey is %v and addres
 详细函数说明请参考该类的函数注释
 
 使用例子：
+```
 import (
 	"log"
 
@@ -52,3 +55,4 @@ if err != nil {
 	return
 }
 log.Printf("mnemonic is %v, jsonPrivateKey is %v, jsonPublicKey is %v and address is %v", ecdsaAccount.Mnemonic, ecdsaAccount.JsonPrivateKey, ecdsaAccount.JsonPublicKey, ecdsaAccount.Address)
+```
