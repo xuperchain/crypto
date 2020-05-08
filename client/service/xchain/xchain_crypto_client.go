@@ -236,6 +236,8 @@ func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecds
 
 // --- 账户相关 end ---
 
+// --- 普通单签名相关 start ---
+
 // 使用ECC私钥来签名
 func (xcc *XchainCryptoClient) SignECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
 	signature, err := sign.SignECDSA(k, msg)
@@ -254,11 +256,15 @@ func (xcc *XchainCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []
 	return result, err
 }
 
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数 -- 供统一验签函数调用
 func (xcc *XchainCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
 	result, err := sign.VerifyV2ECDSA(k, signature, msg)
 	return result, err
 }
+
+// --- 普通单签名相关 end ---
+
+// --- 加解密相关 start ---
 
 // 使用椭圆曲线非对称加密
 func (xcc *XchainCryptoClient) EncryptByEcdsaKey(publicKey *ecdsa.PublicKey, msg []byte) (cypherText []byte, err error) {
@@ -306,6 +312,8 @@ func (xcc *XchainCryptoClient) DecryptHardenByAESKey(cipherInfo string, cypherKe
 func (xcc *XchainCryptoClient) SaveEncryptedAccountToFile(account *account.ECDSAAccountToCloud, path string) error {
 	return key.SaveAccountFile(account, path)
 }
+
+// --- 加解密相关 end ---
 
 // --- 多重签名相关 start ---
 

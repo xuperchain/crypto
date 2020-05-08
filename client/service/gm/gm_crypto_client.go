@@ -220,3 +220,31 @@ func (gcc *GmCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecdsa.Pu
 }
 
 // --- 账户相关 end ---
+
+// --- 普通单签名相关 start ---
+
+// 使用ECC私钥来签名
+func (gcc *GmCryptoClient) SignECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
+	signature, err := sign.SignECDSA(k, msg)
+	return signature, err
+}
+
+// 使用ECC私钥来签名，生成统一签名的新签名函数
+func (gcc *GmCryptoClient) SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) ([]byte, error) {
+	signature, err := sign.SignV2ECDSA(k, msg)
+	return signature, err
+}
+
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数
+func (gcc *GmCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
+	result, err := sign.VerifyECDSA(k, signature, msg)
+	return result, err
+}
+
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数 -- 供统一验签函数调用
+func (gcc *GmCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
+	result, err := sign.VerifyV2ECDSA(k, signature, msg)
+	return result, err
+}
+
+// --- 普通单签名相关 end ---
