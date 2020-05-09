@@ -421,10 +421,14 @@ func (xcc *XchainCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, m
 
 // --- 	schnorr 环签名算法相关 end ---
 
+// --- XuperSignature 统一签名相关 start ---
+
 // --- 统一验签算法，可以对用各种签名算法生成的签名进行验证
 func (xcc *XchainCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, sig []byte, message []byte) (valid bool, err error) {
 	return signature.XuperSigVerify(publicKeys, sig, message)
 }
+
+// --- XuperSignature 统一签名相关 end ---
 
 // --- 	hierarchical deterministic 分层确定性算法相关 start ---
 

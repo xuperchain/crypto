@@ -7,12 +7,19 @@ import (
 	"fmt"
 
 	"github.com/xuperchain/crypto/core/common"
+	"github.com/xuperchain/crypto/core/config"
 )
 
 func SignECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
-	if k.D == nil || k.X == nil || k.Y == nil {
-		return nil, fmt.Errorf("Invalid private key")
+	// 判断是否是NIST标准的私钥
+	isNistCurve := checkKeyCurve(&k.PublicKey)
+	if isNistCurve == false {
+		return nil, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
 	}
+	if k.D == nil {
+		return nil, fmt.Errorf("Param D cannot be nil.")
+	}
+
 	r, s, err := ecdsa.Sign(rand.Reader, k, msg)
 	if err != nil {
 		return nil, err
@@ -21,10 +28,32 @@ func SignECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
 	return MarshalECDSASignature(r, s)
 }
 
-func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
-	if k.D == nil || k.X == nil || k.Y == nil {
-		return nil, fmt.Errorf("Invalid private key")
+// 判断是否是NIST标准的公钥
+func checkKeyCurve(k *ecdsa.PublicKey) bool {
+	if k.X == nil || k.Y == nil {
+		return false
 	}
+
+	switch k.Params().Name {
+	case config.CurveNist: // NIST
+		return true
+	case config.CurveGm: // 国密
+		return false
+	default: // 不支持的密码学类型
+		return false
+	}
+}
+
+func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
+	// 判断是否是NIST标准的私钥
+	isNistCurve := checkKeyCurve(&k.PublicKey)
+	if isNistCurve == false {
+		return nil, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
+	}
+	if k.D == nil {
+		return nil, fmt.Errorf("Param D cannot be nil.")
+	}
+
 	r, s, err := ecdsa.Sign(rand.Reader, k, msg)
 	if err != nil {
 		return nil, err
@@ -57,6 +86,12 @@ func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) 
 }
 
 func VerifyV2ECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) {
+	// 判断是否是NIST标准的公钥
+	isNistCurve := checkKeyCurve(k)
+	if isNistCurve == false {
+		return false, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
+	}
+
 	signature := new(common.ECDSASignature)
 	err = json.Unmarshal(sig, signature)
 	if err != nil {
@@ -67,6 +102,12 @@ func VerifyV2ECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) 
 }
 
 func VerifyECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) {
+	// 判断是否是NIST标准的公钥
+	isNistCurve := checkKeyCurve(k)
+	if isNistCurve == false {
+		return false, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
+	}
+
 	r, s, err := UnmarshalECDSASignature(sig)
 	if err != nil {
 		return false, fmt.Errorf("Failed to unmarshal the ecdsa signature [%s]", err)
