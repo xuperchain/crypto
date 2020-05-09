@@ -6,12 +6,14 @@ import (
 
 	"github.com/xuperchain/crypto/gm/account"
 	"github.com/xuperchain/crypto/gm/config"
+	"github.com/xuperchain/crypto/gm/ecies"
 	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 	"github.com/xuperchain/crypto/gm/hash"
 	"github.com/xuperchain/crypto/gm/hdwallet/key"
 	"github.com/xuperchain/crypto/gm/sign"
 
-	walletRand "github.com/xuperchain/crypto/core/hdwallet/rand"
+	aesUtil "github.com/xuperchain/crypto/gm/aes"
+	walletRand "github.com/xuperchain/crypto/gm/hdwallet/rand"
 )
 
 type GmCryptoClient struct {
@@ -248,3 +250,54 @@ func (gcc *GmCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []by
 }
 
 // --- 普通单签名相关 end ---
+
+// --- 加解密相关 start ---
+
+// 使用椭圆曲线非对称加密
+func (gcc *GmCryptoClient) EncryptByEcdsaKey(publicKey *ecdsa.PublicKey, msg []byte) (cypherText []byte, err error) {
+	cypherText, err = ecies.Encrypt(publicKey, msg)
+	return cypherText, err
+}
+
+// 使用椭圆曲线非对称解密
+func (gcc *GmCryptoClient) DecryptByEcdsaKey(privateKey *ecdsa.PrivateKey, cypherText []byte) (msg []byte, err error) {
+	msg, err = ecies.Decrypt(privateKey, cypherText)
+	return msg, err
+}
+
+// 使用AES对称加密算法加密
+func (gcc *GmCryptoClient) EncryptByAESKey(info string, cypherKey string) (string, error) {
+	cipherInfo, err := aesUtil.Encrypt([]byte(info), []byte(cypherKey))
+	if err != nil {
+		return "", err
+	}
+
+	return string(cipherInfo), err
+}
+
+// 使用AES对称加密算法解密
+func (gcc *GmCryptoClient) DecryptByAESKey(cipherInfo string, cypherKey string) (string, error) {
+	info, err := aesUtil.Decrypt([]byte(cipherInfo), []byte(cypherKey))
+	if err != nil {
+		return "", err
+	}
+
+	return string(info), nil
+}
+
+// 使用AES对称加密算法加密，密钥会被增强拓展，提升破解难度
+func (gcc *GmCryptoClient) EncryptHardenByAESKey(info string, cypherKey string) (string, error) {
+	return key.EncryptByKey(info, cypherKey)
+}
+
+// 使用AES对称加密算法解密，密钥曾经被增强拓展，提升破解难度
+func (gcc *GmCryptoClient) DecryptHardenByAESKey(cipherInfo string, cypherKey string) (string, error) {
+	return key.DecryptByKey(cipherInfo, cypherKey)
+}
+
+// 将经过支付密码加密的账户保存到文件中
+func (gcc *GmCryptoClient) SaveEncryptedAccountToFile(account *account.ECDSAAccountToCloud, path string) error {
+	return key.SaveAccountFile(account, path)
+}
+
+// --- 加解密相关 end ---

@@ -51,4 +51,20 @@ func main() {
 	isSignatureMatch, err := gcc.VerifyECDSA(&privateKey.PublicKey, sig, msg)
 	log.Printf("Verifying & Unmashalling GM ecdsa signature by VerifyECDSA, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
 	// --- ECDSA签名算法相关 end ---
+
+	// --- 非对称加密算法相关 start ---
+	msg = []byte("Hello encryption!")
+	ct, err := gcc.EncryptByEcdsaKey(&privateKey.PublicKey, msg)
+	if err != nil {
+		log.Printf("Encrypt failed and err is: %v", err)
+		return
+	}
+
+	pt, err := gcc.DecryptByEcdsaKey(privateKey, ct)
+	if err != nil {
+		log.Printf("Decrypt failed and err is: %v", err)
+		return
+	}
+	log.Printf("pt msg after decryption is: %s", pt)
+	// --- 非对称加密算法相关 end ---
 }

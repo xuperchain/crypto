@@ -7,41 +7,63 @@ package ecies
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"fmt"
 
-	libecies "github.com/xuperchain/crypto/core/ecies/libecies"
+	"github.com/xuperchain/crypto/gm/config"
+	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 )
 
-func Encrypt(publicKey *ecdsa.PublicKey, msg []byte) (cypherText []byte, err error) {
-	if publicKey.Curve.Params().Name != "P-256" {
-		err = fmt.Errorf("curve [%v] is not supported yet.", publicKey.Curve.Params().Name)
-		return nil, err
+func Encrypt(k *ecdsa.PublicKey, msg []byte) (cypherText []byte, err error) {
+	// 判断是否是国密标准的公钥
+	isGmCurve := checkKeyCurve(k)
+	if isGmCurve == false {
+		return nil, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
 	}
 
-	pub := libecies.ImportECDSAPublic(publicKey)
+	key := new(sm2.PublicKey)
+	//	key := &sm2.PrivateKey{}
+	key.Curve = sm2.P256Sm2() // elliptic.P256()
+	key.X = k.X
+	key.Y = k.Y
 
-	ct, err := libecies.Encrypt(rand.Reader, pub, msg, nil, nil)
-	if err != nil {
-		return nil, err
-	}
+	cypherText, err = sm2.Encrypt(key, msg)
+	return cypherText, err
 
-	return ct, nil
 }
 
-func Decrypt(privateKey *ecdsa.PrivateKey, cypherText []byte) (msg []byte, err error) {
-	if privateKey.PublicKey.Curve.Params().Name != "P-256" {
-		err = fmt.Errorf("curve [%v] is not supported yet.", privateKey.PublicKey.Curve.Params().Name)
-		return nil, err
+// 判断是否是国密标准的公钥
+func checkKeyCurve(k *ecdsa.PublicKey) bool {
+	if k.X == nil || k.Y == nil {
+		return false
 	}
 
-	prv := libecies.ImportECDSA(privateKey)
+	switch k.Params().Name {
+	case config.CurveNist: // NIST
+		return false
+	case config.CurveGm: // 国密
+		return true
+	default: // 不支持的密码学类型
+		return false
+	}
+}
 
-	pt, err := prv.Decrypt(rand.Reader, cypherText, nil, nil)
-	if err != nil {
-		fmt.Println(err.Error())
-		return nil, err
+func Decrypt(k *ecdsa.PrivateKey, cypherText []byte) (msg []byte, err error) {
+	// 判断是否是国密标准的私钥
+	isGmCurve := checkKeyCurve(&k.PublicKey)
+	if isGmCurve == false {
+		return nil, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
+	}
+	if k.D == nil {
+		return nil, fmt.Errorf("Param D cannot be nil.")
 	}
 
-	return pt, nil
+	key := new(sm2.PrivateKey)
+	//	key := &sm2.PrivateKey{}
+	key.PublicKey.Curve = sm2.P256Sm2() // elliptic.P256()
+	key.X = k.X
+	key.Y = k.Y
+	key.D = k.D
+
+	msg, err = sm2.Decrypt(key, cypherText)
+	return msg, err
 }

@@ -35,7 +35,7 @@ func SignECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
 
 }
 
-// 判断是否是国密标准的私钥
+// 判断是否是国密标准的公钥
 func checkKeyCurve(k *ecdsa.PublicKey) bool {
 	if k.X == nil || k.Y == nil {
 		return false
@@ -57,7 +57,6 @@ func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) 
 	if isGmCurve == false {
 		return nil, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
 	}
-
 	if k.D == nil {
 		return nil, fmt.Errorf("Param D cannot be nil.")
 	}
@@ -101,7 +100,7 @@ func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) 
 }
 
 func VerifyV2ECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) {
-	// 判断是否是国密标准的私钥
+	// 判断是否是国密标准的公钥
 	isGmCurve := checkKeyCurve(k)
 	if isGmCurve == false {
 		return false, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)
@@ -122,7 +121,7 @@ func VerifyV2ECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) 
 }
 
 func VerifyECDSA(k *ecdsa.PublicKey, sig, msg []byte) (valid bool, err error) {
-	// 判断是否是国密标准的私钥
+	// 判断是否是国密标准的公钥
 	isGmCurve := checkKeyCurve(k)
 	if isGmCurve == false {
 		return false, fmt.Errorf("This cryptography curve[%s] has not been supported yet.", k.Params().Name)

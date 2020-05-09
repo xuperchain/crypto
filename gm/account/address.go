@@ -7,10 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/xuperchain/crypto/core/base58"
-	"github.com/xuperchain/crypto/core/config"
-	"github.com/xuperchain/crypto/core/hash"
-	"github.com/xuperchain/crypto/core/utils"
+	"github.com/xuperchain/crypto/gm/base58"
+	"github.com/xuperchain/crypto/gm/config"
+	"github.com/xuperchain/crypto/gm/utils"
 
 	gmHash "github.com/xuperchain/crypto/gm/hash"
 )
@@ -90,7 +89,7 @@ func checkCurveForPublicKeys(keys []*ecdsa.PublicKey) bool {
 func getAddressFromKeyData(pub *ecdsa.PublicKey, data []byte) (string, error) {
 	// 替换国密
 	outputSM3 := gmHash.HashUsingSM3(data)
-	OutputRipemd160 := hash.HashUsingRipemd160(outputSM3)
+	OutputRipemd160 := gmHash.HashUsingRipemd160(outputSM3)
 
 	// 暂时只支持一个字节长度，也就是uint8的密码学标志位
 	// 判断是否是nist标准的私钥
