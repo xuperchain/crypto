@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"fmt"
 
 	"github.com/xuperchain/crypto/core/account"
 	"github.com/xuperchain/crypto/core/config"
@@ -256,7 +255,7 @@ func (xcc *XchainCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []
 	return result, err
 }
 
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数 -- 供统一验签函数调用
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数  -- 内部函数，供统一验签函数调用
 func (xcc *XchainCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
 	result, err := sign.VerifyV2ECDSA(k, signature, msg)
 	return result, err
@@ -354,41 +353,15 @@ func (xcc *XchainCryptoClient) GenerateMultiSignSignature(s []byte, r []byte) ([
 	return multisign.GenerateMultiSignSignature(s, r)
 }
 
-// 使用ECC公钥数组来进行多重签名的验证
+// 使用ECC公钥数组来进行多重签名的验证  -- 内部函数，供统一验签函数调用
 func (xcc *XchainCryptoClient) VerifyMultiSig(keys []*ecdsa.PublicKey, signature, message []byte) (bool, error) {
-	if len(keys) < 2 {
-		return false, fmt.Errorf("The total num of keys should be greater than two.")
-	}
-
-	// 判断是否是nist标准的私钥
-	switch keys[0].Params().Name {
-	case config.CurveNist: // NIST
-		signature, err := multisign.VerifyMultiSig(keys, signature, message)
-		return signature, err
-	case config.CurveGm: // 国密
-		return false, fmt.Errorf("This cryptography has not been supported yet.")
-	default: // 不支持的密码学类型
-		return false, fmt.Errorf("This cryptography has not been supported yet.")
-	}
+	return multisign.VerifyMultiSig(keys, signature, message)
 }
 
 // -- 多重签名的另一种用法，适用于完全中心化的流程
 // 使用ECC私钥数组来进行多重签名，生成统一签名格式XuperSignature
 func (xcc *XchainCryptoClient) MultiSign(keys []*ecdsa.PrivateKey, message []byte) ([]byte, error) {
-	// 判断是否是nist标准的私钥
-	if len(keys) < 2 {
-		return nil, fmt.Errorf("The total num of keys should be greater than two.")
-	}
-
-	switch keys[0].Params().Name {
-	case config.CurveNist: // NIST
-		signature, err := multisign.MultiSign(keys, message)
-		return signature, err
-	case config.CurveGm: // 国密
-		return nil, fmt.Errorf("This cryptography has not been supported yet.")
-	default: // 不支持的密码学类型
-		return nil, fmt.Errorf("This cryptography has not been supported yet.")
-	}
+	return multisign.MultiSign(keys, message)
 }
 
 // --- 多重签名相关 end ---
@@ -400,7 +373,7 @@ func (xcc *XchainCryptoClient) SignSchnorr(privateKey *ecdsa.PrivateKey, message
 	return schnorr_sign.Sign(privateKey, message)
 }
 
-// schnorr签名算法 验证签名
+// schnorr签名算法 验证签名  -- 内部函数，供统一验签函数调用
 func (xcc *XchainCryptoClient) VerifySchnorr(publicKey *ecdsa.PublicKey, sig, message []byte) (bool, error) {
 	return schnorr_sign.Verify(publicKey, sig, message)
 }
@@ -414,7 +387,7 @@ func (xcc *XchainCryptoClient) SignSchnorrRing(keys []*ecdsa.PublicKey, privateK
 	return schnorr_ring_sign.Sign(keys, privateKey, message)
 }
 
-// schnorr环签名算法 验证签名
+// schnorr环签名算法 验证签名  -- 内部函数，供统一验签函数调用
 func (xcc *XchainCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, message []byte) (bool, error) {
 	return schnorr_ring_sign.Verify(keys, sig, message)
 }

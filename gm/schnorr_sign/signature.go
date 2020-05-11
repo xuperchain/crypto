@@ -14,8 +14,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/xuperchain/crypto/core/common"
-	"github.com/xuperchain/crypto/core/hash"
+	"github.com/xuperchain/crypto/gm/common"
+	"github.com/xuperchain/crypto/gm/hash"
+	"github.com/xuperchain/crypto/gm/utils"
 )
 
 var (
@@ -77,14 +78,15 @@ func Sign(privateKey *ecdsa.PrivateKey, message []byte) (schnorrSignature []byte
 	}
 
 	// 1. Compute k = H(m || x)
-	k := hash.HashUsingSha256(append(message, privateKey.D.Bytes()...))
+	//	k := hash.HashUsingSha256(append(message, privateKey.D.Bytes()...))
+	k := hash.HashUsingSM3(utils.BytesCombine(message, privateKey.D.Bytes()))
 
 	// 2. Compute e = H(m || k * G)
 	// 2.1 compute k * G
 	curve := privateKey.Curve
 	x, y := curve.ScalarBaseMult(k)
 	// 2.2 compute H(m || k * G)
-	e := hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...))
+	e := hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y)))
 
 	// 3. k = s + e * x, so we can compute s = k - e * x
 	intK := new(big.Int).SetBytes(k)
@@ -167,7 +169,7 @@ func Verify(publicKey *ecdsa.PublicKey, sig []byte, message []byte) (valid bool,
 	// 1.3 compute s * g + e * p
 	x, y := curve.Add(x1, y1, x2, y2)
 
-	e := hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...))
+	e := hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y)))
 
 	intE := new(big.Int).SetBytes(e)
 
