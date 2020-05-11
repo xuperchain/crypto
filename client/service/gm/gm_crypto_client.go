@@ -10,7 +10,11 @@ import (
 	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 	"github.com/xuperchain/crypto/gm/hash"
 	"github.com/xuperchain/crypto/gm/hdwallet/key"
+	"github.com/xuperchain/crypto/gm/multisign"
+	"github.com/xuperchain/crypto/gm/schnorr_ring_sign"
+	"github.com/xuperchain/crypto/gm/schnorr_sign"
 	"github.com/xuperchain/crypto/gm/sign"
+	"github.com/xuperchain/crypto/gm/signature"
 
 	aesUtil "github.com/xuperchain/crypto/gm/aes"
 	walletRand "github.com/xuperchain/crypto/gm/hdwallet/rand"
@@ -243,7 +247,7 @@ func (gcc *GmCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []byte
 	return result, err
 }
 
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数 -- 供统一验签函数调用
+// 使用ECC公钥来验证签名，验证统一签名的新签名函数  -- 内部函数，供统一验签函数调用
 func (gcc *GmCryptoClient) VerifyV2ECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
 	result, err := sign.VerifyV2ECDSA(k, signature, msg)
 	return result, err
@@ -301,3 +305,92 @@ func (gcc *GmCryptoClient) SaveEncryptedAccountToFile(account *account.ECDSAAcco
 }
 
 // --- 加解密相关 end ---
+
+// --- 多重签名相关 start ---
+
+// 每个多重签名算法流程的参与节点生成32位长度的随机byte，返回值可以认为是k
+func (gcc *GmCryptoClient) GetRandom32Bytes() ([]byte, error) {
+	return multisign.GetRandom32Bytes()
+}
+
+// 每个多重签名算法流程的参与节点生成Ri = Ki*G
+func (gcc *GmCryptoClient) GetRiUsingRandomBytes(key *ecdsa.PublicKey, k []byte) []byte {
+	return multisign.GetRiUsingRandomBytes(key, k)
+}
+
+// 负责计算多重签名的节点来收集所有节点的Ri，并计算R = k1*G + k2*G + ... + kn*G
+func (gcc *GmCryptoClient) GetRUsingAllRi(key *ecdsa.PublicKey, arrayOfRi [][]byte) []byte {
+	return multisign.GetRUsingAllRi(key, arrayOfRi)
+}
+
+// 负责计算多重签名的节点来收集所有节点的公钥Pi，并计算公共公钥：C = P1 + P2 + ... + Pn
+func (gcc *GmCryptoClient) GetSharedPublicKeyForPublicKeys(keys []*ecdsa.PublicKey) ([]byte, error) {
+	return multisign.GetSharedPublicKeyForPublicKeys(keys)
+}
+
+// 负责计算多重签名的节点将计算出的R和C分别传递给各个参与节点后，由各个参与节点再次计算自己的Si
+// 计算 Si = Ki + HASH(C,R,m) * Xi
+// X代表大数D，也就是私钥的关键参数
+func (gcc *GmCryptoClient) GetSiUsingKCRM(key *ecdsa.PrivateKey, k []byte, c []byte, r []byte, message []byte) []byte {
+	return multisign.GetSiUsingKCRM(key, k, c, r, message)
+}
+
+// 负责计算多重签名的节点来收集所有节点的Si，并计算出S = sum(si)
+func (gcc *GmCryptoClient) GetSUsingAllSi(arrayOfSi [][]byte) []byte {
+	return multisign.GetSUsingAllSi(arrayOfSi)
+}
+
+// 负责计算多重签名的节点，最终生成多重签名的统一签名格式XuperSignature
+func (gcc *GmCryptoClient) GenerateMultiSignSignature(s []byte, r []byte) ([]byte, error) {
+	return multisign.GenerateMultiSignSignature(s, r)
+}
+
+// 使用ECC公钥数组来进行多重签名的验证  -- 内部函数，供统一验签函数调用
+func (gcc *GmCryptoClient) VerifyMultiSig(keys []*ecdsa.PublicKey, signature, message []byte) (bool, error) {
+	return multisign.VerifyMultiSig(keys, signature, message)
+}
+
+// -- 多重签名的另一种用法，适用于完全中心化的流程
+// 使用ECC私钥数组来进行多重签名，生成统一签名格式XuperSignature
+func (gcc *GmCryptoClient) MultiSign(keys []*ecdsa.PrivateKey, message []byte) ([]byte, error) {
+	return multisign.MultiSign(keys, message)
+}
+
+// --- 多重签名相关 end ---
+
+// --- 	schnorr签名算法相关 start ---
+
+// schnorr签名算法 生成统一签名XuperSignature
+func (gcc *GmCryptoClient) SignSchnorr(privateKey *ecdsa.PrivateKey, message []byte) ([]byte, error) {
+	return schnorr_sign.Sign(privateKey, message)
+}
+
+// schnorr签名算法 验证签名  -- 内部函数，供统一验签函数调用
+func (gcc *GmCryptoClient) VerifySchnorr(publicKey *ecdsa.PublicKey, sig, message []byte) (bool, error) {
+	return schnorr_sign.Verify(publicKey, sig, message)
+}
+
+// --- 	schnorr签名算法相关 end ---
+
+// --- 	schnorr 环签名算法相关 start ---
+
+// schnorr环签名算法 生成统一签名XuperSignature
+func (gcc *GmCryptoClient) SignSchnorrRing(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte) (ringSignature []byte, err error) {
+	return schnorr_ring_sign.Sign(keys, privateKey, message)
+}
+
+// schnorr环签名算法 验证签名  -- 内部函数，供统一验签函数调用
+func (gcc *GmCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, message []byte) (bool, error) {
+	return schnorr_ring_sign.Verify(keys, sig, message)
+}
+
+// --- 	schnorr 环签名算法相关 end ---
+
+// --- XuperSignature 统一签名相关 start ---
+
+// --- 统一验签算法，可以对用各种签名算法生成的签名进行验证
+func (gcc *GmCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, sig []byte, message []byte) (valid bool, err error) {
+	return signature.XuperSigVerify(publicKeys, sig, message)
+}
+
+// --- XuperSignature 统一签名相关 end ---

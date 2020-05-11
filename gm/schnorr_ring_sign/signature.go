@@ -19,10 +19,11 @@ import (
 
 	mathRand "math/rand"
 
-	"github.com/xuperchain/crypto/core/common"
-	"github.com/xuperchain/crypto/core/hash"
-	"github.com/xuperchain/crypto/core/hdwallet/rand"
-	"github.com/xuperchain/crypto/core/schnorr_sign"
+	"github.com/xuperchain/crypto/gm/common"
+	"github.com/xuperchain/crypto/gm/hash"
+	"github.com/xuperchain/crypto/gm/hdwallet/rand"
+	"github.com/xuperchain/crypto/gm/schnorr_sign"
+	"github.com/xuperchain/crypto/gm/utils"
 )
 
 var (
@@ -108,7 +109,9 @@ func Sign(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte)
 	curve := privateKey.Curve
 
 	x, y := curve.ScalarBaseMult(k)
-	allOfE[(signerIndex+1)%lenOfRing] = new(big.Int).SetBytes(hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...)))
+	//	allOfE[(signerIndex+1)%lenOfRing] = new(big.Int).SetBytes(hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...)))
+	e := hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y)))
+	allOfE[(signerIndex+1)%lenOfRing] = new(big.Int).SetBytes(e)
 
 	// 3. Then repeat the procedure to compute every e within the ring until reach index r, r = signerIndex
 	// for i:=(r+1)%R; i!=r; i++%R
@@ -125,7 +128,8 @@ func Sign(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte)
 		x2, y2 := curve.ScalarMult(keys[i].X, keys[i].Y, allOfE[i].Bytes())
 
 		x, y := curve.Add(x1, y1, x2, y2)
-		allOfE[(i+1)%lenOfRing] = new(big.Int).SetBytes(hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...)))
+		e = hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y)))
+		allOfE[(i+1)%lenOfRing] = new(big.Int).SetBytes(e)
 	}
 
 	// 4. Now we get e((r+1)%R), s((r+1)%R), ..., e(r), except s(r), which means the ring has a gap.
@@ -146,7 +150,7 @@ func Sign(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte)
 	//	x1, y1 := curve.ScalarBaseMult(allOfS[signerIndex].Bytes())
 	//	x2, y2 := curve.ScalarMult(keys[signerIndex].X, keys[signerIndex].Y, allOfE[signerIndex].Bytes())
 	//	x, y = curve.Add(x1, y1, x2, y2)
-	//	newE := new(big.Int).SetBytes(hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...)))
+	//	newE := new(big.Int).SetBytes(hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y))))
 	//	log.Printf("E[%d]: %d", (signerIndex+1)%lenOfRing, newE)
 	// --- end for test
 
@@ -319,7 +323,7 @@ func Verify(keys []*ecdsa.PublicKey, signature, message []byte) (bool, error) {
 		x2, y2 := curve.ScalarMult(sig.Members[i].X, sig.Members[i].Y, e.Bytes())
 
 		x, y := curve.Add(x1, y1, x2, y2)
-		e = new(big.Int).SetBytes(hash.HashUsingSha256(append(message, elliptic.Marshal(curve, x, y)...)))
+		e = new(big.Int).SetBytes(hash.HashUsingSM3(utils.BytesCombine(message, elliptic.Marshal(curve, x, y))))
 	}
 
 	log.Printf("ring sig.E: %d", sig.E)

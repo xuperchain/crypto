@@ -9,10 +9,10 @@ import (
 	"log"
 	"math/big"
 
-	"github.com/xuperchain/crypto/core/common"
-	"github.com/xuperchain/crypto/core/hash"
-	"github.com/xuperchain/crypto/core/hdwallet/rand"
-	"github.com/xuperchain/crypto/core/utils"
+	"github.com/xuperchain/crypto/gm/common"
+	"github.com/xuperchain/crypto/gm/hash"
+	"github.com/xuperchain/crypto/gm/hdwallet/rand"
+	"github.com/xuperchain/crypto/gm/utils"
 )
 
 var (
@@ -113,8 +113,8 @@ func getS(keys []*ecdsa.PrivateKey, arrayOfK [][]byte, c []byte, r []byte, messa
 	num := len(arrayOfK)
 	s := big.NewInt(0)
 	for i := 0; i < num; i++ {
-		// 计算HASH(P,R,m)
-		hashBytes := hash.HashUsingSha256(utils.BytesCombine(c, r, message))
+		// 计算HASH(P,R,m)，这里的hash算法选择国密SM3算法
+		hashBytes := hash.HashUsingSM3(utils.BytesCombine(c, r, message))
 
 		// 计算HASH(P,R,m) * xi
 		tempRhs := new(big.Int).Mul(new(big.Int).SetBytes(hashBytes), keys[i].D)
@@ -237,7 +237,7 @@ func checkCurveForPublicKeys(keys []*ecdsa.PublicKey) bool {
 }
 
 //验签算法如下：
-//1. 计算：e = hash(C,R,m)
+//1. 计算：e = sm3(C,R,m)
 //2. 计算：Rv = sG - eC
 //3. 如果Rv == R则返回true，否则返回false
 //func VerifyMultiSig(keys []*ecdsa.PublicKey, signature *MultiSignature, message []byte) (bool, error) {
@@ -280,8 +280,9 @@ func VerifyMultiSig(keys []*ecdsa.PublicKey, signature []byte, message []byte) (
 	// 计算sG
 	lhsX, lhsY := curve.ScalarBaseMult(sig.S)
 
-	// 计算e = HASH(P,R,m)，这里的hash算法选择NIST算法
-	hashBytes := hash.HashUsingSha256(utils.BytesCombine(c, sig.R, message))
+	// 计算e = HASH(P,R,m)，这里的hash算法选择国密SM3算法
+	hashBytes := hash.HashUsingSM3(utils.BytesCombine(c, sig.R, message))
+
 	// 计算eC,也就是HASH(P,R,m) * C
 	x, y := elliptic.Unmarshal(curve, c)
 	rhsX, rhsY := curve.ScalarMult(x, y, hashBytes)
