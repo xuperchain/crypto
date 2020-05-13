@@ -16,6 +16,7 @@ import (
 	"github.com/xuperchain/crypto/gm/sign"
 	"github.com/xuperchain/crypto/gm/signature"
 
+	hd "github.com/xuperchain/crypto/core/hdwallet/api"
 	aesUtil "github.com/xuperchain/crypto/gm/aes"
 	walletRand "github.com/xuperchain/crypto/gm/hdwallet/rand"
 )
@@ -394,3 +395,32 @@ func (gcc *GmCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, s
 }
 
 // --- XuperSignature 统一签名相关 end ---
+
+// --- 	hierarchical deterministic 分层确定性算法相关 start ---
+
+// 通过助记词恢复出分层确定性根密钥
+func (gcc *GmCryptoClient) GenerateMasterKeyByMnemonic(mnemonic string, language int) (string, error) {
+	return hd.GenerateMasterKeyByMnemonic(mnemonic, language)
+}
+
+// 通过分层确定性私钥/公钥（如根私钥）推导出子私钥/公钥
+func (gcc *GmCryptoClient) GenerateChildKey(parentKey string, index uint32) (string, error) {
+	return hd.GenerateChildKey(parentKey, index)
+}
+
+// 将分层确定性私钥转化为公钥
+func (gcc *GmCryptoClient) ConvertPrvKeyToPubKey(privateKey string) (string, error) {
+	return hd.ConvertPrvKeyToPubKey(privateKey)
+}
+
+// 使用子公钥加密
+func (gcc *GmCryptoClient) EncryptByHdKey(publicKey, msg string) (string, error) {
+	return hd.Encrypt(publicKey, msg)
+}
+
+// 使用子公钥和祖先私钥（可以是推导出该子公钥的任何一级祖先私钥）解密
+func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherText string) (string, error) {
+	return hd.Decrypt(publicKey, privateAncestorKey, cypherText)
+}
+
+// --- 	hierarchical deterministic 分层确定性算法相关 end ---

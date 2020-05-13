@@ -7,6 +7,8 @@ import (
 	"github.com/xuperchain/crypto/client/service/gm"
 	"github.com/xuperchain/crypto/gm/account"
 	"github.com/xuperchain/crypto/gm/hdwallet/rand"
+
+	hdapi "github.com/xuperchain/crypto/core/hdwallet/api"
 )
 
 func main() {
@@ -127,4 +129,34 @@ func main() {
 	isAddressValid, _ := gcc.VerifyAddressUsingPublicKeys(ringAddress, schnorrRingSignVerifyKeys)
 	log.Printf("Schnorr ring signature address[%s] is %v", ringAddress, isAddressValid)
 	// --- Schnorr环签名算法相关 end ---
+
+	// --- hd crypto api ---
+	log.Printf("hd crypto api ----------")
+
+	hdMnemonic := "呈 仓 冯 滚 刚 伙 此 丈 锅 语 揭 弃 精 塘 界 戴 玩 爬 奶 滩 哀 极 样 费"
+	// 中心化控制中心产生根密钥
+	rootKey, _ := gcc.GenerateMasterKeyByMnemonic(hdMnemonic, rand.SimplifiedChinese)
+	// 中心化控制中心产生父私钥
+	parentPrivateKey, _ := gcc.GenerateChildKey(rootKey, hdapi.HardenedKeyStart+8)
+	// 中心化控制中心产生父公钥，并分发给客户端
+	parentPublicKey, _ := gcc.ConvertPrvKeyToPubKey(parentPrivateKey)
+
+	hdMsg := "Hello hd msg!"
+
+	// 客户端为每次加密产生子公钥
+	newChildPublicKey, err := gcc.GenerateChildKey(parentPublicKey, 18)
+	log.Printf("newChildPublicKey is %v and err is %v", newChildPublicKey, err)
+	// 客户端使用子公钥加密，产生密文
+	cryptoMsg, err := gcc.EncryptByHdKey(newChildPublicKey, hdMsg)
+	log.Printf("cryptoMsg is %v and err is %v", []byte(cryptoMsg), err)
+
+	// 中心化控制中心使用根密钥、子公钥、密文，解密出原文
+	realMsg, err := gcc.DecryptByHdKey(newChildPublicKey, rootKey, cryptoMsg)
+	log.Printf("realMsg decrypted by root key is: [%s] and err is %v", realMsg, err)
+
+	// 全节点使用一级父私钥、二级子公钥、密文，解密出原文
+	realMsg, err = gcc.DecryptByHdKey(newChildPublicKey, parentPrivateKey, cryptoMsg)
+	log.Printf("realMsg decrypted by parent private key is: [%s] and err is %v", realMsg, err)
+	log.Printf("hd crypto api end----------")
+	// -- hd crypto api end ---
 }
