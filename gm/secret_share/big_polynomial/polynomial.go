@@ -12,7 +12,7 @@ import (
 	"math/big"
 	//	"fmt"
 
-	"github.com/xuperchain/crypto/core/hdwallet/rand"
+	"github.com/xuperchain/crypto/gm/hdwallet/rand"
 )
 
 const (

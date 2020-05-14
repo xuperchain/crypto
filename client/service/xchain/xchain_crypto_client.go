@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"math/big"
 
 	"github.com/xuperchain/crypto/core/account"
 	"github.com/xuperchain/crypto/core/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/xuperchain/crypto/core/multisign"
 	"github.com/xuperchain/crypto/core/schnorr_ring_sign"
 	"github.com/xuperchain/crypto/core/schnorr_sign"
+	"github.com/xuperchain/crypto/core/secret_share/complex_secret_share"
 	"github.com/xuperchain/crypto/core/sign"
 	"github.com/xuperchain/crypto/core/signature"
 
@@ -366,7 +368,7 @@ func (xcc *XchainCryptoClient) MultiSign(keys []*ecdsa.PrivateKey, message []byt
 
 // --- 多重签名相关 end ---
 
-// --- 	schnorr签名算法相关 start ---
+// --- schnorr签名算法相关 start ---
 
 // schnorr签名算法 生成统一签名XuperSignature
 func (xcc *XchainCryptoClient) SignSchnorr(privateKey *ecdsa.PrivateKey, message []byte) ([]byte, error) {
@@ -378,9 +380,9 @@ func (xcc *XchainCryptoClient) VerifySchnorr(publicKey *ecdsa.PublicKey, sig, me
 	return schnorr_sign.Verify(publicKey, sig, message)
 }
 
-// --- 	schnorr签名算法相关 end ---
+// --- schnorr签名算法相关 end ---
 
-// --- 	schnorr 环签名算法相关 start ---
+// --- schnorr 环签名算法相关 start ---
 
 // schnorr环签名算法 生成统一签名XuperSignature
 func (xcc *XchainCryptoClient) SignSchnorrRing(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte) (ringSignature []byte, err error) {
@@ -392,7 +394,7 @@ func (xcc *XchainCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, m
 	return schnorr_ring_sign.Verify(keys, sig, message)
 }
 
-// --- 	schnorr 环签名算法相关 end ---
+// --- schnorr 环签名算法相关 end ---
 
 // --- XuperSignature 统一签名相关 start ---
 
@@ -403,7 +405,7 @@ func (xcc *XchainCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKe
 
 // --- XuperSignature 统一签名相关 end ---
 
-// --- 	hierarchical deterministic 分层确定性算法相关 start ---
+// --- hierarchical deterministic 分层确定性算法相关 start ---
 
 // 通过助记词恢复出分层确定性根密钥
 func (xcc *XchainCryptoClient) GenerateMasterKeyByMnemonic(mnemonic string, language int) (string, error) {
@@ -430,4 +432,18 @@ func (xcc *XchainCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cyp
 	return hd.Decrypt(publicKey, privateAncestorKey, cypherText)
 }
 
-// --- 	hierarchical deterministic 分层确定性算法相关 end ---
+// --- hierarchical deterministic 分层确定性算法相关 end ---
+
+// --- secret_share 秘密分享算法相关 end ---
+
+// 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
+func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
+	return complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, secret)
+}
+
+// 通过收集到的碎片来还原出秘密
+func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
+	return complex_secret_share.ComplexSecretRetrieve(shares)
+}
+
+// --- secret_share 秘密分享算法相关 end ---
