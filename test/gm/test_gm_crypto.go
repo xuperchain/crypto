@@ -3,12 +3,13 @@ package main
 import (
 	"crypto/ecdsa"
 	"log"
+	"math/big"
 
 	"github.com/xuperchain/crypto/client/service/gm"
 	"github.com/xuperchain/crypto/gm/account"
 	"github.com/xuperchain/crypto/gm/hdwallet/rand"
 
-	hdapi "github.com/xuperchain/crypto/core/hdwallet/api"
+	hdapi "github.com/xuperchain/crypto/gm/hdwallet/api"
 )
 
 func main() {
@@ -159,4 +160,38 @@ func main() {
 	log.Printf("realMsg decrypted by parent private key is: [%s] and err is %v", realMsg, err)
 	log.Printf("hd crypto api end----------")
 	// -- hd crypto api end ---
+
+	// --- secret share start ---
+	//	msg = []byte("Welcome to the world of secret share.")
+	secretMsg := 2147483647
+	//	log.Printf("max int is %d", int(^uint32(0)>>1))
+	log.Printf("secret_share secret is %d", secretMsg)
+	totalShareNumber := 7
+	minimumShareNumber := 3
+
+	// 不能太大，否则会由于超出有限域范围产生数据丢失
+	complexSecretBigInt, _ := big.NewInt(0).SetString("469507068585669108987494430799457046190734249189690901954100429825889257211", 0)
+	complexSecretMsg := complexSecretBigInt.Bytes()
+	//	complexSecretMsg := []byte("a")
+	//	log.Printf("secret_share complexSecretMsg is: %s", complexSecretMsg)
+	log.Printf("secret_share complexSecretMsg is: %d", complexSecretBigInt)
+
+	complexShares, err := gcc.SecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg)
+	log.Printf("secret_share ComplexSecretSplit result is %v and err is %v", complexShares, err)
+
+	retrieveComplexShares := make(map[int]*big.Int, minimumShareNumber)
+	number := 0
+	for k, v := range complexShares {
+		if number >= minimumShareNumber {
+			break
+		}
+		retrieveComplexShares[k] = v
+		number++
+	}
+
+	secretBytes, _ := gcc.SecretRetrieve(retrieveComplexShares)
+	//	log.Printf("secret_share ComplexSecretRetrieve result is: %s", secretBytes)
+	log.Printf("secret_share ComplexSecretRetrieve result is: %d", big.NewInt(0).SetBytes(secretBytes))
+	// --- secret share end ---
+
 }

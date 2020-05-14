@@ -9,7 +9,6 @@ import (
 	"github.com/xuperchain/crypto/client/service/xchain"
 	"github.com/xuperchain/crypto/core/account"
 	"github.com/xuperchain/crypto/core/hdwallet/rand"
-	"github.com/xuperchain/crypto/core/secret_share/complex_secret_share"
 
 	hdapi "github.com/xuperchain/crypto/core/hdwallet/api"
 )
@@ -219,9 +218,9 @@ func main() {
 	// -- hd crypto api end ---
 
 	//	msg = []byte("Welcome to the world of secret share.")
-	secretMsg := 2147483647
+	//	secretMsg := 2147483647
 	//	log.Printf("max int is %d", int(^uint32(0)>>1))
-	log.Printf("secret_share secret is %d", secretMsg)
+	//	log.Printf("secret_share secret is %d", secretMsg)
 	totalShareNumber := 7
 	minimumShareNumber := 3
 
@@ -236,7 +235,7 @@ func main() {
 	//	log.Printf("secret_share complexSecretMsg is: %s", complexSecretMsg)
 	log.Printf("secret_share complexSecretMsg is: %d", complexSecretBigInt)
 
-	complexShares, err := complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg)
+	complexShares, err := xcc.SecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg)
 	log.Printf("secret_share ComplexSecretSplit result is %v and err is %v", complexShares, err)
 
 	retrieveComplexShares := make(map[int]*big.Int, minimumShareNumber)
@@ -249,7 +248,7 @@ func main() {
 		number++
 	}
 
-	secretBytes, _ := complex_secret_share.ComplexSecretRetrieve(retrieveComplexShares)
+	secretBytes, _ := xcc.SecretRetrieve(retrieveComplexShares)
 	//	log.Printf("secret_share ComplexSecretRetrieve result is: %s", secretBytes)
 	log.Printf("secret_share ComplexSecretRetrieve result is: %d", big.NewInt(0).SetBytes(secretBytes))
 }

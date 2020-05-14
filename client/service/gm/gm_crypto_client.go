@@ -3,6 +3,7 @@ package gm
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	"math/big"
 
 	"github.com/xuperchain/crypto/gm/account"
 	"github.com/xuperchain/crypto/gm/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/xuperchain/crypto/gm/multisign"
 	"github.com/xuperchain/crypto/gm/schnorr_ring_sign"
 	"github.com/xuperchain/crypto/gm/schnorr_sign"
+	"github.com/xuperchain/crypto/gm/secret_share/complex_secret_share"
 	"github.com/xuperchain/crypto/gm/sign"
 	"github.com/xuperchain/crypto/gm/signature"
 
@@ -359,7 +361,7 @@ func (gcc *GmCryptoClient) MultiSign(keys []*ecdsa.PrivateKey, message []byte) (
 
 // --- 多重签名相关 end ---
 
-// --- 	schnorr签名算法相关 start ---
+// --- schnorr签名算法相关 start ---
 
 // schnorr签名算法 生成统一签名XuperSignature
 func (gcc *GmCryptoClient) SignSchnorr(privateKey *ecdsa.PrivateKey, message []byte) ([]byte, error) {
@@ -371,9 +373,9 @@ func (gcc *GmCryptoClient) VerifySchnorr(publicKey *ecdsa.PublicKey, sig, messag
 	return schnorr_sign.Verify(publicKey, sig, message)
 }
 
-// --- 	schnorr签名算法相关 end ---
+// --- schnorr签名算法相关 end ---
 
-// --- 	schnorr 环签名算法相关 start ---
+// --- schnorr 环签名算法相关 start ---
 
 // schnorr环签名算法 生成统一签名XuperSignature
 func (gcc *GmCryptoClient) SignSchnorrRing(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte) (ringSignature []byte, err error) {
@@ -385,7 +387,7 @@ func (gcc *GmCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, messa
 	return schnorr_ring_sign.Verify(keys, sig, message)
 }
 
-// --- 	schnorr 环签名算法相关 end ---
+// --- schnorr 环签名算法相关 end ---
 
 // --- XuperSignature 统一签名相关 start ---
 
@@ -396,7 +398,7 @@ func (gcc *GmCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, s
 
 // --- XuperSignature 统一签名相关 end ---
 
-// --- 	hierarchical deterministic 分层确定性算法相关 start ---
+// --- hierarchical deterministic 分层确定性算法相关 start ---
 
 // 通过助记词恢复出分层确定性根密钥
 func (gcc *GmCryptoClient) GenerateMasterKeyByMnemonic(mnemonic string, language int) (string, error) {
@@ -423,4 +425,18 @@ func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherT
 	return hd.Decrypt(publicKey, privateAncestorKey, cypherText)
 }
 
-// --- 	hierarchical deterministic 分层确定性算法相关 end ---
+// --- hierarchical deterministic 分层确定性算法相关 end ---
+
+// --- secret_share 秘密分享算法相关 end ---
+
+// 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
+func (gcc *GmCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
+	return complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, secret)
+}
+
+// 通过收集到的碎片来还原出秘密
+func (gcc *GmCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
+	return complex_secret_share.ComplexSecretRetrieve(shares)
+}
+
+// --- secret_share 秘密分享算法相关 end ---
