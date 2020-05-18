@@ -439,7 +439,7 @@ func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherT
 
 // --- 	hierarchical deterministic 分层确定性算法相关 end ---
 
-// --- secret_share 秘密分享算法相关 end ---
+// --- secret_share 秘密分享算法相关 start ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
 func (gcc *GmCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
