@@ -37,7 +37,8 @@ func RandomGenerate(degree int, secret []byte) ([]*big.Int, error) {
 	// 多个bytes组成一个bigint，作为多项式的系数
 	coefficientFactor := 32
 	byteSlice := make([]byte, coefficientFactor)
-	result[0] = intercept
+	index := 0
+	result[index] = intercept
 
 	// 生成非最高次方位的随机参数
 	if degree > 1 {
@@ -49,7 +50,8 @@ func RandomGenerate(degree int, secret []byte) ([]*big.Int, error) {
 		for i := 0; i < len(randomBytes); i += coefficientFactor {
 			byteSlice = randomBytes[i : i+coefficientFactor]
 			//			log.Printf("byteSlice is %v", byteSlice)
-			result[i+1] = big.NewInt(0).SetBytes(byteSlice)
+			result[index+1] = big.NewInt(0).SetBytes(byteSlice)
+			index++
 		}
 	}
 

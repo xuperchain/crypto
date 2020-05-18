@@ -194,4 +194,12 @@ func main() {
 	log.Printf("secret_share ComplexSecretRetrieve result is: %d", big.NewInt(0).SetBytes(secretBytes))
 	// --- secret share end ---
 
+	//--------------密钥分存-----------------
+	strPrivKeyShares, err := gcc.SplitPrivateKey(strJsonPrivateKey, totalShareNumber, minimumShareNumber)
+	log.Printf("share_key SplitPrivateKey result is: %s, and err is: %v", strPrivKeyShares, err)
+
+	jsonPrivKey, err := gcc.RetrievePrivateKeyByShares(strPrivKeyShares[0:minimumShareNumber])
+	log.Printf("share_key RetrievedPrivateKey fragments are: %s, result is: %s, and err is: %v", strPrivKeyShares, jsonPrivKey, err)
+
+	//--------------密钥分存结束-----------------
 }

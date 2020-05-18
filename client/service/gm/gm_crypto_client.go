@@ -228,6 +228,18 @@ func (gcc *GmCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecdsa.Pu
 	return ecdsaPublicKey, err
 }
 
+// 切分账户私钥
+func (gcc *GmCryptoClient) SplitPrivateKey(jsonPrivateKey string, totalShareNumber, minimumShareNumber int) ([]string, error) {
+	jsonPrivateKeyShares, err := account.SplitPrivateKey(jsonPrivateKey, totalShareNumber, minimumShareNumber)
+	return jsonPrivateKeyShares, err
+}
+
+// 通过私钥片段恢复私钥
+func (gcc *GmCryptoClient) RetrievePrivateKeyByShares(jsonPrivateKeyShares []string) (string, error) {
+	jsonPrivateKey, err := account.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
+	return jsonPrivateKey, err
+}
+
 // --- 账户相关 end ---
 
 // --- 普通单签名相关 start ---
@@ -361,7 +373,7 @@ func (gcc *GmCryptoClient) MultiSign(keys []*ecdsa.PrivateKey, message []byte) (
 
 // --- 多重签名相关 end ---
 
-// --- schnorr签名算法相关 start ---
+// --- 	schnorr签名算法相关 start ---
 
 // schnorr签名算法 生成统一签名XuperSignature
 func (gcc *GmCryptoClient) SignSchnorr(privateKey *ecdsa.PrivateKey, message []byte) ([]byte, error) {
@@ -373,9 +385,9 @@ func (gcc *GmCryptoClient) VerifySchnorr(publicKey *ecdsa.PublicKey, sig, messag
 	return schnorr_sign.Verify(publicKey, sig, message)
 }
 
-// --- schnorr签名算法相关 end ---
+// --- 	schnorr签名算法相关 end ---
 
-// --- schnorr 环签名算法相关 start ---
+// --- 	schnorr 环签名算法相关 start ---
 
 // schnorr环签名算法 生成统一签名XuperSignature
 func (gcc *GmCryptoClient) SignSchnorrRing(keys []*ecdsa.PublicKey, privateKey *ecdsa.PrivateKey, message []byte) (ringSignature []byte, err error) {
@@ -387,7 +399,7 @@ func (gcc *GmCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, messa
 	return schnorr_ring_sign.Verify(keys, sig, message)
 }
 
-// --- schnorr 环签名算法相关 end ---
+// --- 	schnorr 环签名算法相关 end ---
 
 // --- XuperSignature 统一签名相关 start ---
 
@@ -398,7 +410,7 @@ func (gcc *GmCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, s
 
 // --- XuperSignature 统一签名相关 end ---
 
-// --- hierarchical deterministic 分层确定性算法相关 start ---
+// --- 	hierarchical deterministic 分层确定性算法相关 start ---
 
 // 通过助记词恢复出分层确定性根密钥
 func (gcc *GmCryptoClient) GenerateMasterKeyByMnemonic(mnemonic string, language int) (string, error) {
@@ -425,7 +437,7 @@ func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherT
 	return hd.Decrypt(publicKey, privateAncestorKey, cypherText)
 }
 
-// --- hierarchical deterministic 分层确定性算法相关 end ---
+// --- 	hierarchical deterministic 分层确定性算法相关 end ---
 
 // --- secret_share 秘密分享算法相关 end ---
 

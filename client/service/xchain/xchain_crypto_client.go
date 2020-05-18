@@ -235,6 +235,18 @@ func (xcc *XchainCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecds
 	return ecdsaPublicKey, err
 }
 
+// 切分账户私钥
+func (xcc *XchainCryptoClient) SplitPrivateKey(jsonPrivateKey string, totalShareNumber, minimumShareNumber int) ([]string, error) {
+	jsonPrivateKeyShares, err := account.SplitPrivateKey(jsonPrivateKey, totalShareNumber, minimumShareNumber)
+	return jsonPrivateKeyShares, err
+}
+
+// 通过私钥片段恢复私钥
+func (xcc *XchainCryptoClient) RetrievePrivateKeyByShares(jsonPrivateKeyShares []string) (string, error) {
+	jsonPrivateKey, err := account.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
+	return jsonPrivateKey, err
+}
+
 // --- 账户相关 end ---
 
 // --- 普通单签名相关 start ---
