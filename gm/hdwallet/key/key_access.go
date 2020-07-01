@@ -2,7 +2,7 @@ package key
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
+	//	"crypto/elliptic"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/gm/ecies"
+	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 	"github.com/xuperchain/crypto/gm/hash"
 
 	accountUtil "github.com/xuperchain/crypto/gm/account"
@@ -108,13 +109,14 @@ func GetEcdsaPublicKeyFromJson(jsonContent []byte) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, err //json有问题
 	}
-	if publicKey.Curvname != "P-256" {
+	if publicKey.Curvname != "SM2-P-256" {
 		log.Printf("curve [%v] is not supported yet.", publicKey.Curvname)
 		err = fmt.Errorf("curve [%v] is not supported yet.", publicKey.Curvname)
 		return nil, err
 	}
 	ecdsaPublicKey := &ecdsa.PublicKey{}
-	ecdsaPublicKey.Curve = elliptic.P256()
+	//	ecdsaPublicKey.Curve = elliptic.P256()
+	ecdsaPublicKey.Curve = sm2.P256Sm2()
 	ecdsaPublicKey.X = publicKey.X
 	ecdsaPublicKey.Y = publicKey.Y
 	return ecdsaPublicKey, nil
