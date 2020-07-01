@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"math/big"
 
-	"github.com/xuperchain/crypto/gm/account"
+	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/gm/config"
 	"github.com/xuperchain/crypto/gm/ecies"
 	"github.com/xuperchain/crypto/gm/gmsm/sm2"
@@ -18,12 +18,16 @@ import (
 	"github.com/xuperchain/crypto/gm/sign"
 	"github.com/xuperchain/crypto/gm/signature"
 
-	hd "github.com/xuperchain/crypto/core/hdwallet/api"
+	"github.com/xuperchain/crypto/client/service/base"
+
+	accountUtil "github.com/xuperchain/crypto/gm/account"
 	aesUtil "github.com/xuperchain/crypto/gm/aes"
+	hd "github.com/xuperchain/crypto/gm/hdwallet/api"
 	walletRand "github.com/xuperchain/crypto/gm/hdwallet/rand"
 )
 
 type GmCryptoClient struct {
+	base.CryptoClient
 }
 
 // --- 哈希算法相关 start ---
@@ -77,27 +81,27 @@ func (gcc *GmCryptoClient) GenerateSeedWithErrorChecking(mnemonic string, passwo
 // --- 密钥字符串转换相关 start ---
 
 // 获取ECC私钥的json格式的表达
-func (gcc *GmCryptoClient) GetEcdsaPrivateKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
-	jsonEcdsaPrivateKeyJsonFormat, err := account.GetEcdsaPrivateKeyJsonFormat(k)
+func (gcc *GmCryptoClient) GetEcdsaPrivateKeyJsonFormatStr(k *ecdsa.PrivateKey) (string, error) {
+	jsonEcdsaPrivateKeyJsonFormat, err := accountUtil.GetEcdsaPrivateKeyJsonFormat(k)
 	return jsonEcdsaPrivateKeyJsonFormat, err
 }
 
 // 获取ECC公钥的json格式的表达
-func (gcc *GmCryptoClient) GetEcdsaPublicKeyJsonFormat(k *ecdsa.PrivateKey) (string, error) {
-	jsonEcdsaPublicKeyJsonFormat, err := account.GetEcdsaPublicKeyJsonFormat(k)
+func (gcc *GmCryptoClient) GetEcdsaPublicKeyJsonFormatStr(k *ecdsa.PrivateKey) (string, error) {
+	jsonEcdsaPublicKeyJsonFormat, err := accountUtil.GetEcdsaPublicKeyJsonFormat(k)
 	return jsonEcdsaPublicKeyJsonFormat, err
 }
 
 // 从json格式私钥内容字符串产生ECC私钥
 func (gcc *GmCryptoClient) GetEcdsaPrivateKeyFromJsonStr(keyStr string) (*ecdsa.PrivateKey, error) {
 	jsonBytes := []byte(keyStr)
-	return account.GetEcdsaPrivateKeyFromJson(jsonBytes)
+	return accountUtil.GetEcdsaPrivateKeyFromJson(jsonBytes)
 }
 
 // 从json格式公钥内容字符串产生ECC公钥
 func (gcc *GmCryptoClient) GetEcdsaPublicKeyFromJsonStr(keyStr string) (*ecdsa.PublicKey, error) {
 	jsonBytes := []byte(keyStr)
-	return account.GetEcdsaPublicKeyFromJson(jsonBytes)
+	return accountUtil.GetEcdsaPublicKeyFromJson(jsonBytes)
 }
 
 // --- 密钥字符串转换相关 end ---
@@ -106,31 +110,31 @@ func (gcc *GmCryptoClient) GetEcdsaPublicKeyFromJsonStr(keyStr string) (*ecdsa.P
 
 // 使用单个公钥来生成钱包地址
 func (gcc *GmCryptoClient) GetAddressFromPublicKey(key *ecdsa.PublicKey) (string, error) {
-	address, err := account.GetAddressFromPublicKey(key)
+	address, err := accountUtil.GetAddressFromPublicKey(key)
 	return address, err
 }
 
 // 使用多个公钥来生成钱包地址（环签名，多重签名地址）
 func (gcc *GmCryptoClient) GetAddressFromPublicKeys(keys []*ecdsa.PublicKey) (string, error) {
-	address, err := account.GetAddressFromPublicKeys(keys)
+	address, err := accountUtil.GetAddressFromPublicKeys(keys)
 	return address, err
 }
 
 // 验证钱包地址是否是合法的格式。如果成功，返回true和对应的版本号；如果失败，返回false和默认的版本号0
 func (gcc *GmCryptoClient) CheckAddressFormat(address string) (bool, uint8) {
-	isValid, nVersion := account.CheckAddressFormat(address)
+	isValid, nVersion := accountUtil.CheckAddressFormat(address)
 	return isValid, nVersion
 }
 
 // 验证钱包地址是否和指定的公钥match。如果成功，返回true和对应的版本号；如果失败，返回false和默认的版本号0
 func (gcc *GmCryptoClient) VerifyAddressUsingPublicKey(address string, pub *ecdsa.PublicKey) (bool, uint8) {
-	isValid, nVersion := account.VerifyAddressUsingPublicKey(address, pub)
+	isValid, nVersion := accountUtil.VerifyAddressUsingPublicKey(address, pub)
 	return isValid, nVersion
 }
 
 // 验证钱包地址（环签名，多重签名地址）是否和指定的公钥数组match。如果成功，返回true和对应的版本号；如果失败，返回false和默认的版本号0
 func (gcc *GmCryptoClient) VerifyAddressUsingPublicKeys(address string, pub []*ecdsa.PublicKey) (bool, uint8) {
-	isValid, nVersion := account.VerifyAddressUsingPublicKeys(address, pub)
+	isValid, nVersion := accountUtil.VerifyAddressUsingPublicKeys(address, pub)
 	return isValid, nVersion
 }
 
@@ -150,32 +154,32 @@ func (gcc *GmCryptoClient) ExportNewAccount(path string) error {
 	if err != nil {
 		return err
 	}
-	return account.ExportNewAccount(path, privateKey)
+	return accountUtil.ExportNewAccount(path, privateKey)
 }
 
 // 创建含有助记词的新的账户，返回的字段：（助记词、私钥的json、公钥的json、钱包地址） as ECDSAAccount，以及可能的错误信息
 func (gcc *GmCryptoClient) CreateNewAccountWithMnemonic(language int, strength uint8) (*account.ECDSAAccount, error) {
-	ecdsaAccount, err := account.CreateNewAccountWithMnemonic(language, strength, config.Gm)
+	ecdsaAccount, err := accountUtil.CreateNewAccountWithMnemonic(language, strength, config.Gm)
 	return ecdsaAccount, err
 }
 
 // 创建新的账户，并用支付密码加密私钥后存在本地，
 // 返回的字段：（随机熵（供其他钱包软件推导出私钥）、助记词、私钥的json、公钥的json、钱包地址） as ECDSAAccount，以及可能的错误信息
 func (gcc *GmCryptoClient) CreateNewAccountAndSaveSecretKey(path string, language int, strength uint8, password string) (*account.ECDSAInfo, error) {
-	ecdasaInfo, err := key.CreateAndSaveSecretKey(path, walletRand.SimplifiedChinese, account.StrengthHard, password, config.Gm)
+	ecdasaInfo, err := key.CreateAndSaveSecretKey(path, walletRand.SimplifiedChinese, accountUtil.StrengthHard, password, config.Gm)
 	return ecdasaInfo, err
 }
 
 // 创建新的账户，并导出相关文件（含助记词）到本地。生成如下几个文件：1.助记词，2.私钥，3.公钥，4.钱包地址
 func (gcc *GmCryptoClient) ExportNewAccountWithMnemonic(path string, language int, strength uint8) error {
-	err := account.ExportNewAccountWithMnemonic(path, language, strength, config.Gm)
+	err := accountUtil.ExportNewAccountWithMnemonic(path, language, strength, config.Gm)
 	return err
 }
 
 // 从助记词恢复钱包账户
 // TODO: 后续可以从助记词中识别出语言类型
 func (gcc *GmCryptoClient) RetrieveAccountByMnemonic(mnemonic string, language int) (*account.ECDSAAccount, error) {
-	ecdsaAccount, err := account.GenerateAccountByMnemonic(mnemonic, language)
+	ecdsaAccount, err := accountUtil.GenerateAccountByMnemonic(mnemonic, language)
 	return ecdsaAccount, err
 }
 
@@ -218,25 +222,25 @@ func (gcc *GmCryptoClient) GetEcdsaPrivateKeyFromEncryptedStringByPassword(encry
 
 // 从导出的私钥文件读取私钥
 func (gcc *GmCryptoClient) GetEcdsaPrivateKeyFromFile(filename string) (*ecdsa.PrivateKey, error) {
-	ecdsaPrivateKey, err := account.GetEcdsaPrivateKeyFromFile(filename)
+	ecdsaPrivateKey, err := accountUtil.GetEcdsaPrivateKeyFromFile(filename)
 	return ecdsaPrivateKey, err
 }
 
 // 从导出的公钥文件读取公钥
 func (gcc *GmCryptoClient) GetEcdsaPublicKeyFromFile(filename string) (*ecdsa.PublicKey, error) {
-	ecdsaPublicKey, err := account.GetEcdsaPublicKeyFromFile(filename)
+	ecdsaPublicKey, err := accountUtil.GetEcdsaPublicKeyFromFile(filename)
 	return ecdsaPublicKey, err
 }
 
 // 切分账户私钥
 func (gcc *GmCryptoClient) SplitPrivateKey(jsonPrivateKey string, totalShareNumber, minimumShareNumber int) ([]string, error) {
-	jsonPrivateKeyShares, err := account.SplitPrivateKey(jsonPrivateKey, totalShareNumber, minimumShareNumber)
+	jsonPrivateKeyShares, err := accountUtil.SplitPrivateKey(jsonPrivateKey, totalShareNumber, minimumShareNumber)
 	return jsonPrivateKeyShares, err
 }
 
 // 通过私钥片段恢复私钥
 func (gcc *GmCryptoClient) RetrievePrivateKeyByShares(jsonPrivateKeyShares []string) (string, error) {
-	jsonPrivateKey, err := account.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
+	jsonPrivateKey, err := accountUtil.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
 	return jsonPrivateKey, err
 }
 
@@ -439,7 +443,7 @@ func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherT
 
 // --- 	hierarchical deterministic 分层确定性算法相关 end ---
 
-// --- secret_share 秘密分享算法相关 start ---
+// --- secret_share 秘密分享算法相关 end ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
 func (gcc *GmCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
