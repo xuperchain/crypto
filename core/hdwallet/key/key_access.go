@@ -11,10 +11,11 @@ import (
 	"log"
 	"os"
 
-	"github.com/xuperchain/crypto/core/account"
+	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/core/ecies"
 	"github.com/xuperchain/crypto/core/hash"
 
+	accountUtil "github.com/xuperchain/crypto/core/account"
 	aesUtil "github.com/xuperchain/crypto/core/aes"
 )
 
@@ -60,7 +61,7 @@ func GetEcdsaPrivateKeyFromString(encryptPrivateKey string, password string) (*e
 		return nil, err
 	}
 
-	return account.GetEcdsaPrivateKeyFromJson(originalContent)
+	return accountUtil.GetEcdsaPrivateKeyFromJson(originalContent)
 }
 
 func GetEcdsaPrivateKeyFromFile(path string, password string) (*ecdsa.PrivateKey, error) {
@@ -70,7 +71,7 @@ func GetEcdsaPrivateKeyFromFile(path string, password string) (*ecdsa.PrivateKey
 		return nil, err
 	}
 
-	return account.GetEcdsaPrivateKeyFromJson(originalContent)
+	return accountUtil.GetEcdsaPrivateKeyFromJson(originalContent)
 }
 
 func readFileUsingFilename(filename string) ([]byte, error) {
@@ -100,7 +101,7 @@ func GetEncryptedPrivateKeyFromFile(path string) (string, error) {
 }
 
 func GetEcdsaPublicKeyFromJson(jsonContent []byte) (*ecdsa.PublicKey, error) {
-	publicKey := new(account.ECDSAPublicKey)
+	publicKey := new(accountUtil.ECDSAPublicKey)
 	err := json.Unmarshal(jsonContent, publicKey)
 	if err != nil {
 		return nil, err //json有问题
@@ -167,13 +168,13 @@ func DecryptByKey(cipherInfo string, key string) (string, error) {
 
 // GetPublicKeyByPrivateKey通过私钥获取公钥
 func GetPublicKeyByPrivateKey(binaryPrivateKey string) (string, error) {
-	privatekey, err := account.GetEcdsaPrivateKeyFromJson([]byte(binaryPrivateKey))
+	privatekey, err := accountUtil.GetEcdsaPrivateKeyFromJson([]byte(binaryPrivateKey))
 	if err != nil {
 		return "", err
 	}
 
 	// 补充公钥
-	jsonPublicKey, err := account.GetEcdsaPublicKeyJsonFormat(privatekey)
+	jsonPublicKey, err := accountUtil.GetEcdsaPublicKeyJsonFormat(privatekey)
 	if err != nil {
 		return "", err
 	}
@@ -195,7 +196,7 @@ func EciesEncryptByJsonPublicKey(publicKey string, msg string) (string, error) {
 
 // EciesDecryptByJsonPublicKey 使用字符串私钥进行ecies解密
 func EciesDecryptByJsonPrivateKey(privateKey string, cipherInfo string) (string, error) {
-	apiPrivateKey, err := account.GetEcdsaPrivateKeyFromJson([]byte(privateKey))
+	apiPrivateKey, err := accountUtil.GetEcdsaPrivateKeyFromJson([]byte(privateKey))
 	if err != nil {
 		return "", errors.New("api public key is wrong")
 	}

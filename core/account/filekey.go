@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/sign"
 	"github.com/xuperchain/crypto/core/utils"
@@ -41,13 +42,13 @@ const (
 )
 
 // 助记词、私钥的json、公钥的json、钱包地址
-type ECDSAAccount struct {
-	EntropyByte    []byte
-	Mnemonic       string
-	JsonPrivateKey string
-	JsonPublicKey  string
-	Address        string
-}
+//type ECDSAAccount struct {
+//	EntropyByte    []byte
+//	Mnemonic       string
+//	JsonPrivateKey string
+//	JsonPublicKey  string
+//	Address        string
+//}
 
 var (
 	// 1111 - 11个1，当一个大的bigint和它进行“And”比特运算的时候，就会获得大的bigint最右边4位的比特位
@@ -106,7 +107,7 @@ func readFileUsingFilename(filename string) ([]byte, error) {
 }
 
 // 通过助记词来产生/恢复钱包账户
-func GenerateAccountByMnemonic(mnemonic string, language int) (*ECDSAAccount, error) {
+func GenerateAccountByMnemonic(mnemonic string, language int) (*account.ECDSAAccount, error) {
 	// 判断密码学算法是否支持
 	cryptography, err := GetCryptoByteFromMnemonic(mnemonic, language)
 	if err != nil {
@@ -147,7 +148,7 @@ func GenerateAccountByMnemonic(mnemonic string, language int) (*ECDSAAccount, er
 		return nil, err
 	}
 	// 返回的字段：助记词、私钥的json、公钥的json、钱包地址、错误信息
-	account := &ECDSAAccount{
+	account := &account.ECDSAAccount{
 		EntropyByte:    seed,
 		Mnemonic:       mnemonic,
 		JsonPrivateKey: jsonPrivateKey,
@@ -160,7 +161,7 @@ func GenerateAccountByMnemonic(mnemonic string, language int) (*ECDSAAccount, er
 
 // 参数字段：版本号、语言、强度
 // 返回的字段：助记词、私钥的json、公钥的json、钱包地址、错误信息
-func CreateNewAccountWithMnemonic(language int, strength uint8, cryptography uint8) (*ECDSAAccount, error) {
+func CreateNewAccountWithMnemonic(language int, strength uint8, cryptography uint8) (*account.ECDSAAccount, error) {
 	var entropyBitLength = 0
 	// 根据强度来判断随机数长度
 	// 预留出8个bit用来指定当使用助记词时来恢复私钥时所需要的密码学算法组合

@@ -14,3 +14,12 @@ type ECDSAAccountToCloud struct {
 	EncryptedMnemonic       string
 	Password                string
 }
+
+// 助记词、私钥的json、公钥的json、钱包地址
+type ECDSAAccount struct {
+	EntropyByte    []byte
+	Mnemonic       string
+	JsonPrivateKey string
+	JsonPublicKey  string
+	Address        string
+}

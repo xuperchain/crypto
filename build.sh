@@ -1,8 +1,4 @@
 #!/bin/bash
-
-basedir=`cd $(dirname $0); pwd -P`
-#export GOPATH=$basedir
-
 go build -o $OUTPUT/test_crypto github.com/xuperchain/crypto/test
 go build -o $OUTPUT/test_gm_crypto github.com/xuperchain/crypto/test/gm
 

@@ -6,9 +6,10 @@ import (
 	"log"
 	"strings"
 
-	"github.com/xuperchain/crypto/core/account"
+	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/core/hash"
 
+	accountUtil "github.com/xuperchain/crypto/core/account"
 	aesUtil "github.com/xuperchain/crypto/core/aes"
 )
 
@@ -26,7 +27,7 @@ type AccountInfo struct {
 // 这里不应该再需要知道指定曲线了，也不需要知道版本号了，这个功能应该由助记词中的标记位来判断
 func CreateAndSaveSecretKeyWithMnemonic(path string, language int, mnemonic string, password string) (*account.ECDSAInfo, error) {
 	// 通过助记词来产生钱包账户
-	ecdsaAccount, err := account.GenerateAccountByMnemonic(mnemonic, language)
+	ecdsaAccount, err := accountUtil.GenerateAccountByMnemonic(mnemonic, language)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func SaveAccountFile(account *account.ECDSAAccountToCloud, path string) error {
 // 生成并保存私钥
 func CreateAndSaveSecretKey(path string, language int, strength uint8, password string, cryptography uint8) (*account.ECDSAInfo, error) {
 	//函数向指定的文件中写入数据。如果文件不存在将创建文件，否则会在写入数据之前清空文件。
-	ecdsaAccount, err := account.CreateNewAccountWithMnemonic(language, strength, cryptography)
+	ecdsaAccount, err := accountUtil.CreateNewAccountWithMnemonic(language, strength, cryptography)
 	if err != nil {
 		return nil, err
 	}
