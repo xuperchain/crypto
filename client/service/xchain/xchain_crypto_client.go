@@ -267,7 +267,7 @@ func (xcc *XchainCryptoClient) SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) ([]b
 	return signature, err
 }
 
-// 使用ECC公钥来验证签名，验证统一签名的新签名函数
+// 使用ECC公钥来验证签名 -- 对应SignECDSA
 func (xcc *XchainCryptoClient) VerifyECDSA(k *ecdsa.PublicKey, signature, msg []byte) (bool, error) {
 	result, err := sign.VerifyECDSA(k, signature, msg)
 	return result, err
