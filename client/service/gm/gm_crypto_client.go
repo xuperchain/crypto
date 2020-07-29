@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"math/big"
 
+	"github.com/xuperchain/crypto/client/service/base"
 	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/gm/config"
 	"github.com/xuperchain/crypto/gm/ecies"
@@ -17,8 +18,6 @@ import (
 	"github.com/xuperchain/crypto/gm/secret_share/complex_secret_share"
 	"github.com/xuperchain/crypto/gm/sign"
 	"github.com/xuperchain/crypto/gm/signature"
-
-	"github.com/xuperchain/crypto/client/service/base"
 
 	accountUtil "github.com/xuperchain/crypto/gm/account"
 	aesUtil "github.com/xuperchain/crypto/gm/aes"
@@ -38,13 +37,13 @@ func (gcc *GmCryptoClient) HashUsingSM3(data []byte) []byte {
 	return hashResult
 }
 
-// 使用Hmac512做单次哈希运算
+// 使用Hmac512做哈希运算
 func (gcc *GmCryptoClient) HashUsingHmac512(data, key []byte) []byte {
 	hashResult := hash.HashUsingHmac512(data, key)
 	return hashResult
 }
 
-// 使用Ripemd160做单次哈希运算
+// 使用Ripemd160做哈希运算
 func (gcc *GmCryptoClient) HashUsingRipemd160(data []byte) []byte {
 	hashResult := hash.HashUsingRipemd160(data)
 	return hashResult
@@ -443,7 +442,7 @@ func (gcc *GmCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cypherT
 
 // --- 	hierarchical deterministic 分层确定性算法相关 end ---
 
-// --- secret_share 秘密分享算法相关 end ---
+// --- secret_share 秘密分享算法相关 start ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
 func (gcc *GmCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {

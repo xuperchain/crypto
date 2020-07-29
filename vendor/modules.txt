@@ -1,3 +1,37 @@
+# github.com/consensys/gnark v0.2.1-alpha
+github.com/consensys/gnark/backend
+github.com/consensys/gnark/backend/bn256
+github.com/consensys/gnark/backend/bn256/groth16
+github.com/consensys/gnark/crypto/hash/mimc/bls377
+github.com/consensys/gnark/crypto/hash/mimc/bls381
+github.com/consensys/gnark/crypto/hash/mimc/bn256
+github.com/consensys/gnark/frontend
+github.com/consensys/gnark/gadgets
+github.com/consensys/gnark/gadgets/hash/mimc
+github.com/consensys/gnark/internal/utils/debug
+github.com/consensys/gnark/internal/utils/parallel
+# github.com/consensys/gurvy v0.1.2-0.20200512111154-1662e289e29b
+github.com/consensys/gurvy
+github.com/consensys/gurvy/bls377/fr
+github.com/consensys/gurvy/bls381/fr
+github.com/consensys/gurvy/bn256
+github.com/consensys/gurvy/bn256/fp
+github.com/consensys/gurvy/bn256/fr
+github.com/consensys/gurvy/utils
+github.com/consensys/gurvy/utils/debug
+github.com/consensys/gurvy/utils/parallel
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/testify v1.5.1
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/require
 # golang.org/x/crypto v0.0.0-20200320181102-891825fb96df
-golang.org/x/crypto/ripemd160
 golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/ripemd160
+golang.org/x/crypto/sha3
+# golang.org/x/sys v0.0.0-20200406155108-e3b113bbe6a4
+golang.org/x/sys/cpu
+# gopkg.in/yaml.v2 v2.2.8
+gopkg.in/yaml.v2

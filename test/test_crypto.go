@@ -260,4 +260,21 @@ func main() {
 	log.Printf("share_key RetrievedPrivateKey fragments are: %s, result is: %s, and err is: %v", strPrivKeyShares, jsonPrivKey, err)
 	//--- private key split end ---
 
+	// --- zkp start ---
+	zkpInfo := xcc.ZkpSetupMiMC()
+	secretMsg := []byte("test for zkp")
+	proof, err := xcc.ZkpProveMiMC(zkpInfo.R1CS, zkpInfo.ProvingKey, secretMsg)
+	if err != nil {
+		log.Printf("ZkpProveMiMC failed and err is: %v", err)
+		return
+	}
+	log.Printf("ZkpProveMiMC proof is: %v", proof)
+
+	hashResult = xcc.HashUsingDefaultMiMC(secretMsg)
+	verifyResult, err := xcc.ZkpVerifyMiMC(proof, zkpInfo.VerifyingKey, hashResult)
+	log.Printf("verifyResult proof is: %v and err is: %v", verifyResult, err)
+
+	verifyResult, err = xcc.ZkpVerifyMiMC(proof, zkpInfo.VerifyingKey, []byte("test2 for zkp"))
+	log.Printf("verifyResult proof is: %v and err is: %v", verifyResult, err)
+	// --- zkp end ---
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"math/big"
 
+	"github.com/xuperchain/crypto/client/service/base"
 	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/ecies"
@@ -18,12 +19,16 @@ import (
 	"github.com/xuperchain/crypto/core/sign"
 	"github.com/xuperchain/crypto/core/signature"
 
-	"github.com/xuperchain/crypto/client/service/base"
+	"github.com/xuperchain/crypto/common/zkp"
+	"github.com/xuperchain/crypto/core/zkp/zk_snark/hash/mimc"
 
 	accountUtil "github.com/xuperchain/crypto/core/account"
 	aesUtil "github.com/xuperchain/crypto/core/aes"
 	hd "github.com/xuperchain/crypto/core/hdwallet/api"
 	walletRand "github.com/xuperchain/crypto/core/hdwallet/rand"
+
+	backend_bn256 "github.com/consensys/gnark/backend/bn256"
+	groth16_bn256 "github.com/consensys/gnark/backend/bn256/groth16"
 )
 
 type XchainCryptoClient struct {
@@ -44,15 +49,21 @@ func (xcc *XchainCryptoClient) HashUsingDoubleSha256(data []byte) []byte {
 	return hashResult
 }
 
-// 使用Hmac512做单次哈希运算
+// 使用Hmac512做哈希运算
 func (xcc *XchainCryptoClient) HashUsingHmac512(data, key []byte) []byte {
 	hashResult := hash.HashUsingHmac512(data, key)
 	return hashResult
 }
 
-// 使用Ripemd160做单次哈希运算
+// 使用Ripemd160做哈希运算
 func (xcc *XchainCryptoClient) HashUsingRipemd160(data []byte) []byte {
 	hashResult := hash.HashUsingRipemd160(data)
+	return hashResult
+}
+
+// 使用MiMC做哈希运算
+func (xcc *XchainCryptoClient) HashUsingDefaultMiMC(data []byte) []byte {
+	hashResult := hash.HashUsingDefaultMiMC(data)
 	return hashResult
 }
 
@@ -450,7 +461,7 @@ func (xcc *XchainCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cyp
 
 // --- hierarchical deterministic 分层确定性算法相关 end ---
 
-// --- secret_share 秘密分享算法相关 end ---
+// --- secret_share 秘密分享算法相关 start ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
 func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
@@ -463,3 +474,20 @@ func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, 
 }
 
 // --- secret_share 秘密分享算法相关 end ---
+
+// --- 零知识证明算法相关 start ---
+
+// 初始化哈希算法MiMC的参数
+func (xcc *XchainCryptoClient) ZkpSetupMiMC() *zkp.ZkpInfo {
+	return mimc.Setup()
+}
+
+func (xcc *XchainCryptoClient) ZkpProveMiMC(r1cs *backend_bn256.R1CS, pk *groth16_bn256.ProvingKey, secret []byte) (*groth16_bn256.Proof, error) {
+	return mimc.Prove(r1cs, pk, secret)
+}
+
+func (xcc *XchainCryptoClient) ZkpVerifyMiMC(proof *groth16_bn256.Proof, vk *groth16_bn256.VerifyingKey, hashResult []byte) (bool, error) {
+	return mimc.Verify(proof, vk, hashResult)
+}
+
+// --- 零知识证明算法相关 end ---
