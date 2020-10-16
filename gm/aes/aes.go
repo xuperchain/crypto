@@ -4,7 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 
-	"github.com/xuperchain/crypto/gm/utils"
+	"github.com/xuperchain/crypto/common/utils"
 )
 
 func Encrypt(originalData, key []byte) ([]byte, error) {

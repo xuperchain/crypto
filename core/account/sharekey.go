@@ -2,11 +2,13 @@ package account
 
 import (
 	"encoding/json"
-	"github.com/xuperchain/crypto/core/secret_share/complex_secret_share"
 	//"log"
+	"crypto/elliptic"
 	"encoding/hex"
-	"github.com/xuperchain/crypto/core/utils"
 	"math/big"
+
+	"github.com/xuperchain/crypto/common/utils"
+	"github.com/xuperchain/crypto/core/secret_share/complex_secret_share"
 )
 
 //ShareGroup 密码学切分后的密钥片段簇
@@ -22,6 +24,11 @@ type PrivateKeyShare struct {
 func SplitPrivateKey(jsonPrivKey string, totalShareNumber, minimumShareNumber int) ([]string, error) {
 	privateKeyBytes := []byte(jsonPrivKey)
 	//log.Printf("[SharePrivateKey]privateKeyBytes is %v", privateKeyBytes)
+
+	privateKey, err := GetEcdsaPrivateKeyFromJson(privateKeyBytes)
+	if nil != err {
+		return []string{}, err
+	}
 
 	privateKeyLength := len(privateKeyBytes)
 	privateKeyByteGroup := [][]byte{}
@@ -39,7 +46,7 @@ func SplitPrivateKey(jsonPrivKey string, totalShareNumber, minimumShareNumber in
 	//基于密码学对每段密钥进行切分
 	complexShareGroup := map[int]ShareGroup{}
 	for _, complexSecretMsg := range privateKeyByteGroup {
-		complexShares, err := complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg)
+		complexShares, err := complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg, privateKey.Curve)
 		if nil != err {
 			return []string{}, err
 		}
@@ -99,7 +106,7 @@ func RetrievePrivateKeyByShares(strEncodeComplexShareGroup []string) (string, er
 			retrieveComplexShares[k] = v
 		}
 
-		secretBytes, err := complex_secret_share.ComplexSecretRetrieve(retrieveComplexShares)
+		secretBytes, err := complex_secret_share.ComplexSecretRetrieve(retrieveComplexShares, elliptic.P256())
 		if nil != err {
 			return "", err
 		}

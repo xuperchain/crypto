@@ -1,5 +1,11 @@
 package xchain
 
+/*
+Copyright Baidu Inc. All Rights Reserved.
+
+<jingbo@baidu.com> 西二旗第一帅
+*/
+
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -21,6 +27,10 @@ import (
 
 	"github.com/xuperchain/crypto/common/zkp"
 	"github.com/xuperchain/crypto/core/zkp/zk_snark/hash/mimc"
+
+	"github.com/xuperchain/crypto/common/math/ecc"
+	"github.com/xuperchain/crypto/core/threshold/schnorr/dkg"
+	"github.com/xuperchain/crypto/core/threshold/schnorr/tss_sign"
 
 	accountUtil "github.com/xuperchain/crypto/core/account"
 	aesUtil "github.com/xuperchain/crypto/core/aes"
@@ -423,15 +433,6 @@ func (xcc *XchainCryptoClient) VerifySchnorrRing(keys []*ecdsa.PublicKey, sig, m
 
 // --- schnorr 环签名算法相关 end ---
 
-// --- XuperSignature 统一签名相关 start ---
-
-// --- 统一验签算法，可以对用各种签名算法生成的签名进行验证
-func (xcc *XchainCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, sig []byte, message []byte) (valid bool, err error) {
-	return signature.XuperSigVerify(publicKeys, sig, message)
-}
-
-// --- XuperSignature 统一签名相关 end ---
-
 // --- hierarchical deterministic 分层确定性算法相关 start ---
 
 // 通过助记词恢复出分层确定性根密钥
@@ -464,13 +465,13 @@ func (xcc *XchainCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cyp
 // --- secret_share 秘密分享算法相关 start ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
-func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
-	return complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, secret)
+func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte, curve elliptic.Curve) (shares map[int]*big.Int, err error) {
+	return complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, secret, curve)
 }
 
 // 通过收集到的碎片来还原出秘密
-func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
-	return complex_secret_share.ComplexSecretRetrieve(shares)
+func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int, curve elliptic.Curve) ([]byte, error) {
+	return complex_secret_share.ComplexSecretRetrieve(shares, curve)
 }
 
 // --- secret_share 秘密分享算法相关 end ---
@@ -491,3 +492,105 @@ func (xcc *XchainCryptoClient) ZkpVerifyMiMC(proof *groth16_bn256.Proof, vk *gro
 }
 
 // --- 零知识证明算法相关 end ---
+
+// --- 门限签名相关 start ---
+
+// -- STEP 1: DKG - distributed key generation --
+// distributed private key generation and distributed public key generation
+
+// 所有潜在参与节点根据门限目标生成产生本地秘密和验证点的私钥碎片
+// minimumShareNumber可以理解为threshold，至少需要minimumShareNumber个潜在参与节点进行实际参与才能完成门限签名
+func (xcc *XchainCryptoClient) GetLocalShares(totalShareNumber, minimumShareNumber int) (shares map[int]*big.Int, points []*ecc.Point, err error) {
+	return dkg.LocalSecretShareGenerateWithVerifyPoints(totalShareNumber, minimumShareNumber)
+}
+
+// ---
+// TODO: 网络层，各个潜在参与节点将对应的密钥碎片和验证点数据发送给对应的其它潜在参与节点
+// shares的key就是目标对应节点的index
+// 每个潜在参与节点都有一个unique的index作为标志
+// ---
+
+// 每个潜在参与节点根据所收集的所有的与自己相关的碎片(自己的Index是X值，收集所有该X值对应的Y值)，
+// 来计算出自己的本地私钥X(i)(该X值对应的Y值之和)，这是一个关键秘密信息
+func (xcc *XchainCryptoClient) GetLocalPrivateKeyByShares(shares []*big.Int) *ecdsa.PrivateKey {
+	return dkg.LocalPrivateKeyGenerate(shares)
+}
+
+// 每个潜在参与节点来收集所有节点的秘密验证点，并计算公共公钥：C = VP(1) + VP(2) + ... + VP(i)
+func (xcc *XchainCryptoClient) GetSharedPublicKey(verifyPoints []*ecc.Point) (*ecdsa.PublicKey, error) {
+	return dkg.PublicKeyGenerate(verifyPoints)
+}
+
+// TODO：存储层，各个节点保留相关信息：自己的私钥，自己的编号Index
+
+// -- STEP 2: DSG - distributed signature generation --
+
+// 每个实际参与节点生成32位长度的随机byte，返回值可以认为是K(i)
+// 可以跟多重签名复用同名函数
+//func (xcc *XchainCryptoClient) GetRandom32Bytes() ([]byte, error) {
+//	return tss_sign.GetRandom32Bytes()
+//}
+
+// 每个门限签名算法流程的实际参与节点生成R(i) = K(i)*G
+// 然后将自己的R(i)广播到全网其它节点
+// 可以跟多重签名复用同名函数
+//func (xcc *XchainCryptoClient) GetRiUsingRandomBytes(key *ecdsa.PublicKey, k []byte) []byte {
+//	return tss_sign.GetRiUsingRandomBytes(key, k)
+//}
+
+// 每个实际参与节点都收集所有实际参与节点的R(i)，
+// 并计算R = sum(R(i)) = K(1)*G + K(2)*G + ... + K(i)*G
+// 可以跟多重签名复用同名函数
+//func (xcc *XchainCryptoClient) GetRUsingAllRi(key *ecdsa.PublicKey, arrayOfRi [][]byte) []byte {
+//	return tss_sign.GetRUsingAllRi(key, arrayOfRi)
+//}
+
+// 每个实际参与节点再次计算自己的独有系数与自己私钥秘密的乘积，也就是X(i) * Coef(i)，为下一步的S(i)计算做准备
+// indexSet是指所有实际参与节点的index所组成的集合
+// localIndexPos是本节点在indexSet中的位置
+// key是在DKG过程中，自己计算出的私钥
+func (xcc *XchainCryptoClient) GetXiWithcoef(indexSet []*big.Int, localIndexPos int, key *ecdsa.PrivateKey) *big.Int {
+	return tss_sign.GetXiWithcoef(indexSet, localIndexPos, key)
+}
+
+// 每个实际参与节点再次计算自己的S(i)
+// S(i) = K(i) + HASH(C,R,m) * X(i) * Coef(i)
+// X代表大数D，也就是私钥的关键参数
+func (xcc *XchainCryptoClient) GetSiUsingKCRMWithCoef(k []byte, c []byte, r []byte, message []byte, coef *big.Int) []byte {
+	return tss_sign.GetSiUsingKCRMWithCoef(k, c, r, message, coef)
+}
+
+// 注意：专用于多层门限算法，每个实际参与节点再次计算自己的S(i) 版本2
+// S(i) = HASH(C,R,m) * X(i) * Coef(i)
+// X代表大数D，也就是私钥的关键参数
+func (xcc *XchainCryptoClient) GetSiUsingKCRMWithCoefNoKi(c []byte, r []byte, message []byte, coef *big.Int) []byte {
+	return tss_sign.GetSiUsingKCRMWithCoefNoKi(c, r, message, coef)
+}
+
+// 负责计算门限签名的实际参与节点来收集所有实际参与节点的S(i)，并计算出S = sum(S(i))
+// = K(1) + HASH(C,R,m) * X(1) * Coef(1) + K(2) + HASH(C,R,m) * X(2) * Coef(2) + ... + K(i) + HASH(C,R,m) * X(i) * Coef(i)
+// 可以跟多重签名复用同名函数
+//func (xcc *XchainCryptoClient) GetSUsingAllSi(arrayOfSi [][]byte) []byte {
+//	return tss_sign.GetSUsingAllSi(arrayOfSi)
+//}
+
+// 负责计算门限签名的节点，最终生成门限签名的统一签名格式XuperSignature
+func (xcc *XchainCryptoClient) GenerateTssSignSignature(s []byte, r []byte) ([]byte, error) {
+	return tss_sign.GenerateTssSignSignature(s, r)
+}
+
+// 使用ECC公钥来进行门限签名的验证  -- 内部函数，供统一验签函数调用
+func (xcc *XchainCryptoClient) VerifyTssSig(key *ecdsa.PublicKey, signature, message []byte) (bool, error) {
+	return tss_sign.VerifyTssSig(key, signature, message)
+}
+
+// --- 门限签名相关 end ---
+
+// --- XuperSignature 统一签名相关 start ---
+
+// --- 统一验签算法，可以对用各种签名算法生成的统一签名格式XuperSignature进行验证
+func (xcc *XchainCryptoClient) VerifyXuperSignature(publicKeys []*ecdsa.PublicKey, sig []byte, message []byte) (valid bool, err error) {
+	return signature.XuperSigVerify(publicKeys, sig, message)
+}
+
+// --- XuperSignature 统一签名相关 end ---

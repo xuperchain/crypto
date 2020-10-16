@@ -2,13 +2,20 @@ package main
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"encoding/json"
 	"log"
 	"math/big"
 
 	"github.com/xuperchain/crypto/client/service/xchain"
 	"github.com/xuperchain/crypto/core/account"
+	//	"github.com/xuperchain/crypto/core/common"
 	"github.com/xuperchain/crypto/core/hdwallet/rand"
+	//	"github.com/xuperchain/crypto/core/schnorr_sign_new"
+
+	"github.com/xuperchain/crypto/common/math/ecc"
+	//	"github.com/xuperchain/crypto/core/threshold/schnorr/dkg"
+	//	"github.com/xuperchain/crypto/core/threshold/schnorr/tss_sign"
 
 	hdapi "github.com/xuperchain/crypto/core/hdwallet/api"
 )
@@ -149,6 +156,17 @@ func main() {
 	isSignatureMatch, err = xcc.VerifyXuperSignature(keysSchnorr, sigma, msg)
 	log.Printf("Verifying & Unmashalling Schnorr signature, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
 
+	// --- 验证new Schnorr签名算法 start ---
+
+	//	sigma, err = schnorr_sign_new.Sign(privateKey, msg)
+	//	log.Printf("New Schnorr signature is %s and err is %v", sigma, err)
+	//
+	//	//	isSignatureMatch, err = xcc.VerifySchnorr(&privateKey.PublicKey, sigma, msg)
+	//	isSignatureMatch, err = schnorr_sign_new.Verify(&privateKey.PublicKey, sigma, msg)
+	//	log.Printf("Verifying & Unmashalling new Schnorr signature, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
+
+	// --- 验证new Schnorr签名算法 end ---
+
 	// 验证Schnorr 环签名算法
 	log.Printf("Schnorr ring sign ----------")
 	log.Printf("keys2 is [%v]:", keys2)
@@ -224,7 +242,7 @@ func main() {
 	totalShareNumber := 7
 	minimumShareNumber := 3
 
-	// ---- ComplexSecret
+	// ---- ComplexSecret ---
 	log.Printf("----------------------")
 	//	complexSecretMsg := []byte("Welcome to the world of secret share.")
 	//	complexSecretMsg := []byte("Welcome to the world of secret share 12345678.")
@@ -235,7 +253,7 @@ func main() {
 	//	log.Printf("secret_share complexSecretMsg is: %s", complexSecretMsg)
 	log.Printf("secret_share complexSecretMsg is: %d", complexSecretBigInt)
 
-	complexShares, err := xcc.SecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg)
+	complexShares, err := xcc.SecretSplit(totalShareNumber, minimumShareNumber, complexSecretMsg, privateKey.Curve)
 	log.Printf("secret_share ComplexSecretSplit result is %v and err is %v", complexShares, err)
 
 	retrieveComplexShares := make(map[int]*big.Int, minimumShareNumber)
@@ -248,7 +266,7 @@ func main() {
 		number++
 	}
 
-	secretBytes, _ := xcc.SecretRetrieve(retrieveComplexShares)
+	secretBytes, _ := xcc.SecretRetrieve(retrieveComplexShares, privateKey.Curve)
 	//	log.Printf("secret_share ComplexSecretRetrieve result is: %s", secretBytes)
 	log.Printf("secret_share ComplexSecretRetrieve result is: %d", big.NewInt(0).SetBytes(secretBytes))
 
@@ -276,5 +294,428 @@ func main() {
 
 	verifyResult, err = xcc.ZkpVerifyMiMC(proof, zkpInfo.VerifyingKey, []byte("test2 for zkp"))
 	log.Printf("verifyResult proof is: %v and err is: %v", verifyResult, err)
+
 	// --- zkp end ---
+
+	// --- 验证门限签名 start ---
+
+	log.Printf("threhold sig start...")
+
+	// 开始为多方建立初始化信息
+	//	partnerPublic1 := &dkg.PartnerPublic{Index: 1, IndentityKey: big.NewInt(0).SetBytes([]byte("threhold partner 1"))}
+	//	partnerPublic2 := &dkg.PartnerPublic{Index: 2, IndentityKey: big.NewInt(0).SetBytes([]byte("threhold partner 2"))}
+	//	partnerPublic3 := &dkg.PartnerPublic{Index: 3, IndentityKey: big.NewInt(0).SetBytes([]byte("threhold partner 3"))}
+
+	//	log.Printf("partnerPublic1 is %v", partnerPublic1)
+
+	//	shares1, verifyPoints1, err := dkg.SecretShareLocalKeyGenerateWithVerifyPoints(3, 2, big.NewInt(1).Bytes())
+	//	shares2, verifyPoints2, err := dkg.SecretShareLocalKeyGenerateWithVerifyPoints(3, 2, big.NewInt(2).Bytes())
+	//	shares3, verifyPoints3, err := dkg.SecretShareLocalKeyGenerateWithVerifyPoints(3, 2, big.NewInt(3).Bytes())
+
+	//	log.Printf("shares1 is %v, verifyPoints1 is %v and err is %v", shares1, verifyPoints1, err)
+	//	log.Printf("shares2 is %v, verifyPoints2 is %v and err is %v", shares2, verifyPoints2, err)
+	//	log.Printf("shares3 is %v, verifyPoints3 is %v and err is %v", shares3, verifyPoints3, err)
+
+	//	partnerShares1 := &dkg.PartnerShares{PartnerInfo: partnerPublic1, Shares: shares1, VerifyPoints: verifyPoints1}
+	//	partnerShares2 := &dkg.PartnerShares{PartnerInfo: partnerPublic2, Shares: shares2, VerifyPoints: verifyPoints2}
+	//	partnerShares3 := &dkg.PartnerShares{PartnerInfo: partnerPublic3, Shares: shares3, VerifyPoints: verifyPoints3}
+	//
+	//	log.Printf("partnerShares1 is %v", partnerShares1)
+
+	//	//	allPartnerShares := make([]*dkg.PartnerShares, 3)
+	//	var allPartnerShares []*dkg.PartnerShares
+	//	allPartnerShares = append(allPartnerShares, partnerShares1)
+	//	allPartnerShares = append(allPartnerShares, partnerShares2)
+	//	allPartnerShares = append(allPartnerShares, partnerShares3)
+	//
+	//	// 从收集的所有碎片中保存与自己相关的密钥部分，并保存在本地
+	//	localShares1 := dkg.SecretShareLocalKeyGather(allPartnerShares, 1)
+	//	localShares2 := dkg.SecretShareLocalKeyGather(allPartnerShares, 2)
+	//	localShares3 := dkg.SecretShareLocalKeyGather(allPartnerShares, 3)
+
+	//	// 从本地share计算自己的秘密Xi
+	//	localXi1 := dkg.CalcuateXi(localShares1)
+	//	localXi2 := dkg.CalcuateXi(localShares2)
+	//	localXi3 := dkg.CalcuateXi(localShares3)
+	//
+	//	log.Printf("localXi[N] is: %v, %v, %v", localXi1, localXi2, localXi3)
+
+	//	// 计算公共验证点部分，并保存在本地
+	//	verifyPoints, err := dkg.SecretShareVerifyPointsGather(allPartnerShares, 2)
+	//	jsonVerifyPoints, _ := json.Marshal(verifyPoints)
+	//	log.Printf("verifyPoints is: %s and err is %v", jsonVerifyPoints, err)
+	//
+	//	// 计算公共public key point
+	//	publicKeyPoint, err := dkg.CalculatePublicKey(verifyPoints)
+	//	jsonPublicKeyPoint, _ := json.Marshal(publicKeyPoint)
+	//	log.Printf("publicKeyPoint is: %s and err is %v", jsonPublicKeyPoint, err)
+
+	//	// 计算每一方的public key point
+	//	publicKeyPoints, err := dkg.CalculatePublicKeys(verifyPoints, allPartnerShares, 2)
+	//	jsonPublicKeyPoints, _ := json.Marshal(publicKeyPoints)
+	//	log.Printf("publicKeyPoints is: %s and err is %v", jsonPublicKeyPoints, err)
+
+	// -----
+	//	localPrivateKey1 := new(ecdsa.PrivateKey)
+	//	localPrivateKey1.PublicKey.Curve = publicKeyPoint.Curve //elliptic.P256()
+	//	localPrivateKey1.D = localXi1
+	//	localPrivateKey1.PublicKey.X, localPrivateKey1.PublicKey.Y = publicKeyPoint.Curve.ScalarBaseMult(localXi1.Bytes())
+	//
+	//	localPrivateKey2 := new(ecdsa.PrivateKey)
+	//	localPrivateKey2.PublicKey.Curve = publicKeyPoint.Curve //elliptic.P256()
+	//	localPrivateKey2.D = localXi2
+	//	localPrivateKey2.PublicKey.X, localPrivateKey1.PublicKey.Y = publicKeyPoint.Curve.ScalarBaseMult(localXi2.Bytes())
+	//
+	//	localPrivateKey3 := new(ecdsa.PrivateKey)
+	//	localPrivateKey3.PublicKey.Curve = publicKeyPoint.Curve //elliptic.P256()
+	//	localPrivateKey3.D = localXi3
+	//	localPrivateKey3.PublicKey.X, localPrivateKey1.PublicKey.Y = publicKeyPoint.Curve.ScalarBaseMult(localXi3.Bytes())
+	//
+	//	jsonLocalPrivateKey3, _ := json.Marshal(localPrivateKey3)
+	//	log.Printf("localPrivateKey3 is: %s", jsonLocalPrivateKey3, err)
+
+	// ---
+	// --- DKG ---
+	// 每一方生成自己的秘密碎片
+	// 3个潜在参与节点，门限要求是2，也就是要大于等于2个节点参与才能形成有效签名
+	shares1, verifyPoints1, _ := xcc.GetLocalShares(3, 2)
+	shares2, verifyPoints2, _ := xcc.GetLocalShares(3, 2)
+	shares3, verifyPoints3, _ := xcc.GetLocalShares(3, 2)
+
+	// 碎片交换
+	var localShares1 []*big.Int
+	var localShares2 []*big.Int
+	var localShares3 []*big.Int
+
+	// 节点编号1
+	localShares1 = append(localShares1, shares1[1])
+	localShares1 = append(localShares1, shares2[1])
+	localShares1 = append(localShares1, shares3[1])
+	log.Printf("localShares1 is: %v", localShares1)
+
+	// 节点编号2
+	localShares2 = append(localShares2, shares1[2])
+	localShares2 = append(localShares2, shares2[2])
+	localShares2 = append(localShares2, shares3[2])
+	log.Printf("localShares2 is: %v", localShares2)
+
+	// 节点编号3
+	localShares3 = append(localShares3, shares1[3])
+	localShares3 = append(localShares3, shares2[3])
+	localShares3 = append(localShares3, shares3[3])
+	log.Printf("localShares3 is: %v", localShares3)
+
+	// 计算本地私钥
+	localPrivateKey1 := xcc.GetLocalPrivateKeyByShares(localShares1)
+	localPrivateKey2 := xcc.GetLocalPrivateKeyByShares(localShares2)
+	localPrivateKey3 := xcc.GetLocalPrivateKeyByShares(localShares3)
+
+	jsonLocalPrivateKey3, _ := json.Marshal(localPrivateKey3)
+	log.Printf("localPrivateKey3 is: %s", jsonLocalPrivateKey3)
+
+	// 验证点交换
+	var verifyPoints []*ecc.Point
+
+	verifyPoints = append(verifyPoints, verifyPoints1[0])
+	verifyPoints = append(verifyPoints, verifyPoints2[0])
+	verifyPoints = append(verifyPoints, verifyPoints3[0])
+
+	// 计算公钥
+	tssPublickey, _ := xcc.GetSharedPublicKey(verifyPoints)
+	jsonTssPublickey, _ := json.Marshal(tssPublickey)
+	log.Printf("tssPublickey is: %s", jsonTssPublickey)
+
+	// --- DSG & 验证 ---
+
+	//	var tssKeys []*ecdsa.PrivateKey
+	//	tssKeys = append(tssKeys, localPrivateKey1)
+	//	tssKeys = append(tssKeys, localPrivateKey2)
+
+	// tss签名
+	rk1, _ := xcc.GetRandom32Bytes()
+	rk2, _ := xcc.GetRandom32Bytes()
+	r1 := xcc.GetRiUsingRandomBytes(tssPublickey, rk1)
+	r2 := xcc.GetRiUsingRandomBytes(tssPublickey, rk2)
+
+	var arrayOfRi [][]byte
+	arrayOfRi = append(arrayOfRi, r1)
+	arrayOfRi = append(arrayOfRi, r2)
+
+	r := xcc.GetRUsingAllRi(tssPublickey, arrayOfRi)
+
+	var ks []*big.Int
+	ks = append(ks, big.NewInt(1)) // 节点编号1
+	ks = append(ks, big.NewInt(2)) // 节点编号2
+	// 本次节点编号3不参与签名过程
+	//	ks = append(ks, big.NewInt(3)) // 节点编号3
+
+	w1 := xcc.GetXiWithcoef(ks, 0, localPrivateKey1)
+	w2 := xcc.GetXiWithcoef(ks, 1, localPrivateKey2)
+
+	c := elliptic.Marshal(tssPublickey.Curve, tssPublickey.X, tssPublickey.Y)
+
+	s1 := xcc.GetSiUsingKCRMWithCoef(rk1, c, r, msg, w1)
+	s2 := xcc.GetSiUsingKCRMWithCoef(rk2, c, r, msg, w2)
+
+	var arrayOfSi [][]byte
+	arrayOfSi = append(arrayOfSi, s1)
+	arrayOfSi = append(arrayOfSi, s2)
+
+	s := xcc.GetSUsingAllSi(arrayOfSi)
+	//	log.Printf("all of s is: %d", big.NewInt(0).SetBytes(s))
+
+	tssSig, _ := xcc.GenerateTssSignSignature(s, r)
+	log.Printf("tssSig is: %s", tssSig)
+
+	// 验证tss签名
+	var tssPublicKeys []*ecdsa.PublicKey
+	tssPublicKeys = append(tssPublicKeys, tssPublickey)
+
+	chkResult, _ = xcc.VerifyXuperSignature(tssPublicKeys, tssSig, msg)
+	log.Printf("verify tss sig chkResult is: %v", chkResult)
+
+	log.Printf("threhold sig end...")
+
+	// --- 验证门限签名 end ---
+
+	// --- 验证分层门限签名 start ---
+
+	log.Printf("Hierarchical threhold sig start...")
+
+	// 目标：团队中3个员工和3个经理，要求，3个团队成员参与才能获得授权签名，其中至少要有2个经理配合
+	// 低授权级别的门限要求必须要大于高授权级别的门限要求，例如，纯成员级别以上是3/6，那么纯经理级别以上只能是2/3，因为2要小于3。
+	// 3个经理的节点编号：1、2、3
+	// 3个员工的节点编号：4、5、6
+
+	// --- DKG ---
+	// 员工（级别E部分）和经理（级别M部分）每一方生成自己的秘密碎片
+	// 6个潜在参与节点，门限要求是3，也就是要大于等于3个节点参与才能形成有效签名
+	sharesE1, verifyPointsE1, _ := xcc.GetLocalShares(6, 3)
+	sharesE2, verifyPointsE2, _ := xcc.GetLocalShares(6, 3)
+	sharesE3, verifyPointsE3, _ := xcc.GetLocalShares(6, 3)
+	sharesE4, verifyPointsE4, _ := xcc.GetLocalShares(6, 3)
+	sharesE5, verifyPointsE5, _ := xcc.GetLocalShares(6, 3)
+	sharesE6, verifyPointsE6, _ := xcc.GetLocalShares(6, 3)
+
+	// 碎片交换
+	var localSharesE1 []*big.Int
+	var localSharesE2 []*big.Int
+	var localSharesE3 []*big.Int
+	var localSharesE4 []*big.Int
+	var localSharesE5 []*big.Int
+	var localSharesE6 []*big.Int
+
+	// 员工节点编号1的E部分
+	localSharesE1 = append(localSharesE1, sharesE1[1])
+	localSharesE1 = append(localSharesE1, sharesE2[1])
+	localSharesE1 = append(localSharesE1, sharesE3[1])
+	localSharesE1 = append(localSharesE1, sharesE4[1])
+	localSharesE1 = append(localSharesE1, sharesE5[1])
+	localSharesE1 = append(localSharesE1, sharesE6[1])
+	log.Printf("localSharesE1 is: %v", localSharesE1)
+
+	// 员工节点编号2的E部分
+	localSharesE2 = append(localSharesE2, sharesE1[2])
+	localSharesE2 = append(localSharesE2, sharesE2[2])
+	localSharesE2 = append(localSharesE2, sharesE3[2])
+	localSharesE2 = append(localSharesE2, sharesE4[2])
+	localSharesE2 = append(localSharesE2, sharesE5[2])
+	localSharesE2 = append(localSharesE2, sharesE6[2])
+	log.Printf("localSharesE2 is: %v", localSharesE2)
+
+	// 员工节点编号3的E部分
+	localSharesE3 = append(localSharesE3, sharesE1[3])
+	localSharesE3 = append(localSharesE3, sharesE2[3])
+	localSharesE3 = append(localSharesE3, sharesE3[3])
+	localSharesE3 = append(localSharesE3, sharesE4[3])
+	localSharesE3 = append(localSharesE3, sharesE5[3])
+	localSharesE3 = append(localSharesE3, sharesE6[3])
+	log.Printf("localSharesE3 is: %v", localSharesE3)
+
+	// 员工节点编号4的E部分
+	localSharesE4 = append(localSharesE4, sharesE1[4])
+	localSharesE4 = append(localSharesE4, sharesE2[4])
+	localSharesE4 = append(localSharesE4, sharesE3[4])
+	localSharesE4 = append(localSharesE4, sharesE4[4])
+	localSharesE4 = append(localSharesE4, sharesE5[4])
+	localSharesE4 = append(localSharesE4, sharesE6[4])
+	log.Printf("localSharesE4 is: %v", localSharesE4)
+
+	// 员工节点编号5的E部分
+	localSharesE5 = append(localSharesE5, sharesE1[5])
+	localSharesE5 = append(localSharesE5, sharesE2[5])
+	localSharesE5 = append(localSharesE5, sharesE3[5])
+	localSharesE5 = append(localSharesE5, sharesE4[5])
+	localSharesE5 = append(localSharesE5, sharesE5[5])
+	localSharesE5 = append(localSharesE5, sharesE6[5])
+	log.Printf("localSharesE5 is: %v", localSharesE5)
+
+	// 员工节点编号6的E部分
+	localSharesE6 = append(localSharesE6, sharesE1[6])
+	localSharesE6 = append(localSharesE6, sharesE2[6])
+	localSharesE6 = append(localSharesE6, sharesE3[6])
+	localSharesE6 = append(localSharesE6, sharesE4[6])
+	localSharesE6 = append(localSharesE6, sharesE5[6])
+	localSharesE6 = append(localSharesE6, sharesE6[6])
+	log.Printf("localSharesE6 is: %v", localSharesE6)
+
+	//--经理（级别M部分）每一方生成自己的秘密碎片
+	// 注意，经理同时持有M部分和E部分的碎片
+	// 3个潜在参与节点，门限要求是2，也就是要大于等于2个节点参与才能形成有效签名
+	// 员工节点编号1的M部分
+	sharesM1, verifyPointsM1, _ := xcc.GetLocalShares(3, 2)
+	sharesM2, verifyPointsM2, _ := xcc.GetLocalShares(3, 2)
+	sharesM3, verifyPointsM3, _ := xcc.GetLocalShares(3, 2)
+
+	// 碎片交换
+	var localSharesM1 []*big.Int
+	var localSharesM2 []*big.Int
+	var localSharesM3 []*big.Int
+
+	// 节点编号1的M部分
+	localSharesM1 = append(localSharesM1, sharesM1[1])
+	localSharesM1 = append(localSharesM1, sharesM2[1])
+	localSharesM1 = append(localSharesM1, sharesM3[1])
+	log.Printf("localSharesM1 is: %v", localSharesM1)
+
+	// 节点编号2的E部分
+	localSharesM2 = append(localSharesM2, sharesM1[2])
+	localSharesM2 = append(localSharesM2, sharesM2[2])
+	localSharesM2 = append(localSharesM2, sharesM3[2])
+	log.Printf("localSharesM2 is: %v", localSharesM2)
+
+	// 节点编号3的E部分
+	localSharesM3 = append(localSharesM3, sharesM1[3])
+	localSharesM3 = append(localSharesM3, sharesM2[3])
+	localSharesM3 = append(localSharesM3, sharesM3[3])
+	log.Printf("localSharesM3 is: %v", localSharesM3)
+
+	// 验证点交换
+	var verifyPointsEM []*ecc.Point
+
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE1[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE2[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE3[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE4[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE5[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsE6[0])
+
+	verifyPointsEM = append(verifyPointsEM, verifyPointsM1[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsM2[0])
+	verifyPointsEM = append(verifyPointsEM, verifyPointsM3[0])
+
+	// 计算公钥
+	tssPublickeyEM, _ := xcc.GetSharedPublicKey(verifyPointsEM)
+	jsonTssPublickeyEM, _ := json.Marshal(tssPublickeyEM)
+	log.Printf("tssPublickeyEM is: %s", jsonTssPublickeyEM)
+
+	c = elliptic.Marshal(tssPublickeyEM.Curve, tssPublickeyEM.X, tssPublickeyEM.Y)
+
+	// 计算本地私钥的E部分
+	localPrivateKeyE1 := xcc.GetLocalPrivateKeyByShares(localSharesE1)
+	localPrivateKeyE2 := xcc.GetLocalPrivateKeyByShares(localSharesE2)
+	localPrivateKeyE3 := xcc.GetLocalPrivateKeyByShares(localSharesE3)
+	localPrivateKeyE4 := xcc.GetLocalPrivateKeyByShares(localSharesE4)
+	localPrivateKeyE5 := xcc.GetLocalPrivateKeyByShares(localSharesE5)
+	localPrivateKeyE6 := xcc.GetLocalPrivateKeyByShares(localSharesE6)
+
+	jsonLocalPrivateKeyE3, _ := json.Marshal(localPrivateKeyE3)
+	log.Printf("localPrivateKeyE3 is: %s", jsonLocalPrivateKeyE3)
+	jsonLocalPrivateKeyE5, _ := json.Marshal(localPrivateKeyE5)
+	log.Printf("localPrivateKeyE5 is: %s", jsonLocalPrivateKeyE5)
+	jsonLocalPrivateKeyE6, _ := json.Marshal(localPrivateKeyE6)
+	log.Printf("localPrivateKeyE6 is: %s", jsonLocalPrivateKeyE6)
+
+	// 计算本地私钥的M部分
+	localPrivateKeyM1 := xcc.GetLocalPrivateKeyByShares(localSharesM1)
+	localPrivateKeyM2 := xcc.GetLocalPrivateKeyByShares(localSharesM2)
+	localPrivateKeyM3 := xcc.GetLocalPrivateKeyByShares(localSharesM3)
+
+	jsonLocalPrivateKeyM3, _ := json.Marshal(localPrivateKeyM3)
+	log.Printf("localPrivateKeyM3 is: %s", jsonLocalPrivateKeyM3)
+
+	// --- DSG & 验证 ---
+
+	//	var tssKeys []*ecdsa.PrivateKey
+	//	tssKeys = append(tssKeys, localPrivateKey1)
+	//	tssKeys = append(tssKeys, localPrivateKey2)
+
+	// tss签名
+	rk1, _ = xcc.GetRandom32Bytes()
+	rk2, _ = xcc.GetRandom32Bytes()
+	rk4, _ := xcc.GetRandom32Bytes()
+
+	r1 = xcc.GetRiUsingRandomBytes(tssPublickeyEM, rk1)
+	r2 = xcc.GetRiUsingRandomBytes(tssPublickeyEM, rk2)
+	r4 := xcc.GetRiUsingRandomBytes(tssPublickeyEM, rk4)
+
+	//	var arrayOfRiM [][]byte
+	//	arrayOfRiM = append(arrayOfRiM, r1)
+	//	arrayOfRiM = append(arrayOfRiM, r2)
+	//
+	//	rM := xcc.GetRUsingAllRi(tssPublickey, arrayOfRiM)
+	//
+	//	var arrayOfRiE [][]byte
+	//	arrayOfRiE = append(arrayOfRiE, r1)
+	//	arrayOfRiE = append(arrayOfRiE, r2)
+	//	arrayOfRiE = append(arrayOfRiE, r4)
+	//
+	//	rE := xcc.GetRUsingAllRi(tssPublickeyEM, arrayOfRiE)
+
+	// 通用R
+	var arrayOfRiEM [][]byte
+	arrayOfRiEM = append(arrayOfRiEM, r1)
+	arrayOfRiEM = append(arrayOfRiEM, r2)
+	arrayOfRiEM = append(arrayOfRiEM, r4)
+
+	r = xcc.GetRUsingAllRi(tssPublickeyEM, arrayOfRiEM)
+
+	// SiM部分计算
+	var ksEM []*big.Int
+	ksEM = append(ksEM, big.NewInt(1)) // 节点编号1
+	ksEM = append(ksEM, big.NewInt(2)) // 节点编号2
+
+	wM1 := xcc.GetXiWithcoef(ksEM, 0, localPrivateKeyM1)
+	wM2 := xcc.GetXiWithcoef(ksEM, 1, localPrivateKeyM2)
+
+	//	sM1 := xcc.GetSiUsingKCRMWithCoef(rk1, c, r, msg, wM1)
+	//	sM2 := xcc.GetSiUsingKCRMWithCoef(rk2, c, r, msg, wM2)
+	sM1 := xcc.GetSiUsingKCRMWithCoefNoKi(c, r, msg, wM1)
+	sM2 := xcc.GetSiUsingKCRMWithCoefNoKi(c, r, msg, wM2)
+
+	// SiE部分计算
+	ksEM = append(ksEM, big.NewInt(4)) // 节点编号4
+
+	wE1 := xcc.GetXiWithcoef(ksEM, 0, localPrivateKeyE1)
+	wE2 := xcc.GetXiWithcoef(ksEM, 1, localPrivateKeyE2)
+	wE4 := xcc.GetXiWithcoef(ksEM, 2, localPrivateKeyE4) // 对应节点编号4
+
+	sE1 := xcc.GetSiUsingKCRMWithCoef(rk1, c, r, msg, wE1)
+	sE2 := xcc.GetSiUsingKCRMWithCoef(rk2, c, r, msg, wE2)
+	sE4 := xcc.GetSiUsingKCRMWithCoef(rk4, c, r, msg, wE4)
+
+	// 计算arrayOfSi(每个节点的M部分和E部分之和)
+	var arrayOfSiEM [][]byte
+	arrayOfSiEM = append(arrayOfSiEM, sM1)
+	arrayOfSiEM = append(arrayOfSiEM, sM2)
+	arrayOfSiEM = append(arrayOfSiEM, sE1)
+	arrayOfSiEM = append(arrayOfSiEM, sE2)
+	arrayOfSiEM = append(arrayOfSiEM, sE4)
+
+	s = xcc.GetSUsingAllSi(arrayOfSiEM)
+	//	log.Printf("all of s is: %d", big.NewInt(0).SetBytes(s))
+
+	tssSig, _ = xcc.GenerateTssSignSignature(s, r)
+	log.Printf("tssSig is: %s", tssSig)
+
+	// 验证tss签名
+	var tssPublicKeysEM []*ecdsa.PublicKey
+	tssPublicKeysEM = append(tssPublicKeysEM, tssPublickeyEM)
+
+	chkResult, _ = xcc.VerifyXuperSignature(tssPublicKeysEM, tssSig, msg)
+	log.Printf("verify tss sig chkResult is: %v", chkResult)
+
+	log.Printf("Hierarchical threhold sig end...")
+
+	// --- 验证分层门限签名 end ---
 }

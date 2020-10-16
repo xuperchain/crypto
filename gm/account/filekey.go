@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	"github.com/xuperchain/crypto/common/account"
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/gm/config"
 	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 	"github.com/xuperchain/crypto/gm/sign"
-	"github.com/xuperchain/crypto/gm/utils"
 
 	walletRand "github.com/xuperchain/crypto/gm/hdwallet/rand"
 )

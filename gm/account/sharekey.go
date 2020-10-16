@@ -2,11 +2,12 @@ package account
 
 import (
 	"encoding/json"
-	"github.com/xuperchain/crypto/gm/secret_share/complex_secret_share"
 	//"log"
 	"encoding/hex"
-	"github.com/xuperchain/crypto/gm/utils"
 	"math/big"
+
+	"github.com/xuperchain/crypto/common/utils"
+	"github.com/xuperchain/crypto/gm/secret_share/complex_secret_share"
 )
 
 //ShareGroup 密码学切分后的密钥片段簇

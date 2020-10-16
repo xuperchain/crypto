@@ -9,18 +9,19 @@ package keychain
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/elliptic"
+	//	"crypto/elliptic"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
 	"math/big"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/gm/account"
 	"github.com/xuperchain/crypto/gm/base58"
 	"github.com/xuperchain/crypto/gm/config"
+	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 	"github.com/xuperchain/crypto/gm/hash"
-	"github.com/xuperchain/crypto/gm/utils"
 )
 
 // Hierarchical Deterministic Wallets - child drivation function 相关常量定义
@@ -141,11 +142,12 @@ func NewMaster(seed []byte, cryptography uint8) (*ExtendedKey, error) {
 		return nil, ErrInvalidSeedLength
 	}
 
-	curve := elliptic.P256()
+	//	curve := elliptic.P256()
+	curve := sm2.P256Sm2()
 	switch cryptography {
 	case config.Nist: // NIST
+		return nil, ErrCryptographyNotSupported
 	case config.Gm: // 国密
-		//		curve = sm2.P256Sm2()
 	default: // 不支持的密码学类型
 		return nil, ErrCryptographyNotSupported
 	}
@@ -255,9 +257,11 @@ func (k *ExtendedKey) Child(i uint32) (*ExtendedKey, error) {
 		return nil, ErrDeriveBeyondMaxDepth
 	}
 
-	curve := elliptic.P256()
+	//	curve := elliptic.P256()
+	curve := sm2.P256Sm2()
 	switch k.Cryptography {
 	case config.Nist: // NIST
+		return nil, ErrCryptographyNotSupported
 	case config.Gm: // 国密 GMSM
 		//		curve = sm2.P256Sm2()
 	default: // 不支持的密码学类型 Unsupported cryptography type
@@ -483,9 +487,11 @@ func (k *ExtendedKey) ECPrivateKey() (*ecdsa.PrivateKey, error) {
 		return nil, ErrNotPrivExtKey
 	}
 
-	curve := elliptic.P256()
+	//	curve := elliptic.P256()
+	curve := sm2.P256Sm2()
 	switch k.Cryptography {
 	case config.Nist: // NIST
+		return nil, ErrCryptographyNotSupported
 	case config.Gm: // 国密
 		//		curve = sm2.P256Sm2()
 	default: // 不支持的密码学类型
@@ -580,9 +586,11 @@ func NewKeyFromString(key string) (*ExtendedKey, error) {
 	//	keyData := payload[45:78]
 	keyData := payload[46:]
 
-	curve := elliptic.P256()
+	//	curve := elliptic.P256()
+	curve := sm2.P256Sm2()
 	switch cryptography {
 	case config.Nist: // NIST
+		return nil, ErrCryptographyNotSupported
 	case config.Gm: // 国密
 		//		curve = sm2.P256Sm2()
 	default: // 不支持的密码学类型
@@ -631,9 +639,11 @@ func parsePubKey(pubKeyStr []byte) (key *ecdsa.PublicKey, err error) {
 		pubkey := ecdsa.PublicKey{}
 
 		cryptography := pubKeyStr[1]
-		curve := elliptic.P256()
+		//		curve := elliptic.P256()
+		curve := sm2.P256Sm2()
 		switch cryptography {
 		case config.Nist: // NIST
+			return nil, ErrCryptographyNotSupported
 		case config.Gm: // 国密
 			//			curve = sm2.P256Sm2()
 		default: // 不支持的密码学类型
@@ -667,9 +677,11 @@ func (k *ExtendedKey) pubKeyBytes() ([]byte, error) {
 	// This is a private extended key, so calculate and memorize the public
 	// key if needed.
 	if len(k.PubKey) == 0 {
-		curve := elliptic.P256()
+		//		curve := elliptic.P256()
+		curve := sm2.P256Sm2()
 		switch k.Cryptography {
 		case config.Nist: // NIST
+			return nil, ErrCryptographyNotSupported
 		case config.Gm: // 国密
 			//			curve = sm2.P256Sm2()
 		default: // 不支持的密码学类型

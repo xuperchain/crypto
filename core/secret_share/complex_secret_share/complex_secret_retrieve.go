@@ -1,11 +1,19 @@
+/*
+Copyright Baidu Inc. All Rights Reserved.
+
+<jingbo@baidu.com>
+*/
+
 package complex_secret_share
 
 import (
+	"crypto/elliptic"
 	"errors"
 	"log"
 	"math/big"
 
-	polynomial "github.com/xuperchain/crypto/core/secret_share/big_polynomial"
+	polynomial "github.com/xuperchain/crypto/common/math/big_polynomial"
+	//	polynomial "github.com/xuperchain/crypto/core/secret_share/big_polynomial"
 )
 
 var (
@@ -21,8 +29,8 @@ var (
 //		 which is able to match all the given points.
 // 3. Give x = 0, then the secret number S can be computed
 // 4. Now decode number S, then the secret is retrieved
-func ComplexSecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
-	secretInt := lagrangeInterpolate(shares, 0)
+func ComplexSecretRetrieve(shares map[int]*big.Int, curve elliptic.Curve) ([]byte, error) {
+	secretInt := lagrangeInterpolate(shares, 0, curve)
 
 	secret := secretInt.Bytes()
 
@@ -30,11 +38,12 @@ func ComplexSecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
 }
 
 // Lagrange Polynomial Interpolation Formula
-func lagrangeInterpolate(points map[int]*big.Int, x int) *big.Int {
+func lagrangeInterpolate(points map[int]*big.Int, x int, curve elliptic.Curve) *big.Int {
 	log.Printf("The points is: %v", points)
 
 	// 通过这些坐标点来恢复出多项式
-	result := polynomial.GetPolynomialByPoints(points)
+	polynomialClient := polynomial.New(curve.Params().N)
+	result := polynomialClient.GetPolynomialByPoints(points)
 
 	// 秘密就是常数项
 	secret := result[len(result)-1]

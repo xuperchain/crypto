@@ -40,6 +40,8 @@ func unmarshalXuperSignature(rawSig []byte) (*XuperSignature, error) {
 	case SchnorrRing:
 	// 多重签名
 	case MultiSig:
+	// 门限签名
+	case TssSig:
 	// 不支持的签名类型
 	default:
 		err = fmt.Errorf("This XuperSignature type[%v] is not supported in this version.", sig.SigType)
