@@ -9,10 +9,10 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/core/common"
 	"github.com/xuperchain/crypto/core/hash"
 	"github.com/xuperchain/crypto/core/hdwallet/rand"
-	"github.com/xuperchain/crypto/core/utils"
 )
 
 var (
@@ -31,6 +31,11 @@ const (
 //生成多重签名的算法如下：
 //1. 生成公私钥对(x1, P1), (x2, P2), ..., (xn, Pn)， x代表私钥中的参数大数D，P代表公钥
 //2. 生成临时随机数(k1, k2, ..., kn)
+// TODO: Compute k = H(m || x)
+//    	This makes k unpredictable for anyone who do not know x,
+//    	therefor it's impossible for the attacker to retrive x by breaking the random number generator of the system,
+//   	which has happend in the Sony PlayStation 3 firmware attack.
+//		不再使用临时随机数，而改用H(m || x)来计算k
 //3. 计算：R = k1*G + k2*G + ... + kn*G，G代表基点
 //4. 计算公共公钥：C = P1 + P2 + ... + Pn
 //5. 各方计算：si = ki + HASH(C,R,m) * xi

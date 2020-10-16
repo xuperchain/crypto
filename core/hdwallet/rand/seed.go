@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/core/hash"
 	"github.com/xuperchain/crypto/core/hdwallet/wordlist"
-	"github.com/xuperchain/crypto/core/utils"
 
 	"golang.org/x/crypto/pbkdf2"
 )

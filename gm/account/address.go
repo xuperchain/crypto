@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/gm/base58"
 	"github.com/xuperchain/crypto/gm/config"
-	"github.com/xuperchain/crypto/gm/utils"
 
 	gmHash "github.com/xuperchain/crypto/gm/hash"
 )

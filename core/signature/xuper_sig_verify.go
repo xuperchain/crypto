@@ -1,5 +1,11 @@
 package signature
 
+/*
+Copyright Baidu Inc. All Rights Reserved.
+
+<jingbo@baidu.com> 西二旗第一帅
+*/
+
 import (
 	"crypto/ecdsa"
 	"encoding/asn1"
@@ -13,6 +19,7 @@ import (
 	"github.com/xuperchain/crypto/core/schnorr_ring_sign"
 	"github.com/xuperchain/crypto/core/schnorr_sign"
 	"github.com/xuperchain/crypto/core/sign"
+	"github.com/xuperchain/crypto/core/threshold/schnorr/tss_sign"
 )
 
 var (
@@ -82,6 +89,16 @@ func XuperSigVerify(keys []*ecdsa.PublicKey, signature, message []byte) (bool, e
 		switch keys[0].Params().Name {
 		case config.CurveNist: // NIST
 			verifyResult, err := multisign.VerifyMultiSig(keys, xuperSig.SigContent, message)
+			return verifyResult, err
+		case config.CurveGm: // 国密
+			return false, fmt.Errorf("This cryptography[%v] has not been supported yet.", keys[0].Params().Name)
+		default: // 不支持的密码学类型
+			return false, fmt.Errorf("This cryptography[%v] has not been supported yet.", keys[0].Params().Name)
+		}
+	case common.TssSig:
+		switch keys[0].Params().Name {
+		case config.CurveNist: // NIST
+			verifyResult, err := tss_sign.VerifyTssSig(keys[0], xuperSig.SigContent, message)
 			return verifyResult, err
 		case config.CurveGm: // 国密
 			return false, fmt.Errorf("This cryptography[%v] has not been supported yet.", keys[0].Params().Name)

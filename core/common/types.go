@@ -14,6 +14,8 @@ const (
 	SchnorrRing = "SchnorrRing"
 	// 多重签名算法
 	MultiSig = "MultiSig"
+	// 门限签名算法
+	TssSig = "TssSig"
 )
 
 // --- 签名数据结构相关 start ---
@@ -52,6 +54,12 @@ type RingSignature struct {
 
 // 多重签名
 type MultiSignature struct {
+	S []byte
+	R []byte
+}
+
+// 门限签名
+type TssSignature struct {
 	S []byte
 	R []byte
 }

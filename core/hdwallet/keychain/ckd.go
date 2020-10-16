@@ -16,11 +16,11 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/core/account"
 	"github.com/xuperchain/crypto/core/base58"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/hash"
-	"github.com/xuperchain/crypto/core/utils"
 )
 
 // Hierarchical Deterministic Wallets - child drivation function 相关常量定义

@@ -9,10 +9,10 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/gm/common"
 	"github.com/xuperchain/crypto/gm/hash"
 	"github.com/xuperchain/crypto/gm/hdwallet/rand"
-	"github.com/xuperchain/crypto/gm/utils"
 )
 
 var (

@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"math/big"
 
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/core/common"
 	"github.com/xuperchain/crypto/core/hash"
 	"github.com/xuperchain/crypto/core/hdwallet/rand"
-	"github.com/xuperchain/crypto/core/utils"
 )
 
 // 生成默认随机数Ki
@@ -84,6 +84,11 @@ func GetSUsingAllSi(arrayOfSi [][]byte) []byte {
 
 //生成多重签名的流程如下：
 //1. 各方分别生成自己的随机数Ki(K1, K2, ..., Kn) --- func getRandomBytes() ([]byte, error)
+// TODO: Compute k = H(m || x)
+//    	This makes k unpredictable for anyone who do not know x,
+//    	therefor it's impossible for the attacker to retrive x by breaking the random number generator of the system,
+//   	which has happend in the Sony PlayStation 3 firmware attack.
+//		不再使用临时随机数，而改用H(m || x)来计算k
 //2. 各方计算自己的 Ri = Ki*G，G代表基点 --- func getRiUsingRandomBytes(key *ecdsa.PublicKey, k []byte) []byte
 //3. 发起者收集Ri，计算：R = sum(Ri) --- func getRUsingAllRi(key *ecdsa.PublicKey, arrayOfRi [][]byte) []byte
 //4. 发起者收集公钥Pi，计算公共公钥：C = P1 + P2 + ... + Pn --- func getSharedPublicKeyForPrivateKeys(keys []*ecdsa.PrivateKey) ([]byte, error)

@@ -12,9 +12,9 @@ import (
 	"strings"
 
 	"github.com/xuperchain/crypto/common/account"
+	"github.com/xuperchain/crypto/common/utils"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/sign"
-	"github.com/xuperchain/crypto/core/utils"
 
 	walletRand "github.com/xuperchain/crypto/core/hdwallet/rand"
 )
@@ -320,6 +320,7 @@ func ExportNewAccount(path string, privateKey *ecdsa.PrivateKey) error {
 
 	return err
 }
+
 func GetEcdsaPrivateKeyFromJson(jsonContent []byte) (*ecdsa.PrivateKey, error) {
 	privateKey := new(ECDSAPrivateKey)
 	err := json.Unmarshal(jsonContent, privateKey)
@@ -339,6 +340,7 @@ func GetEcdsaPrivateKeyFromJson(jsonContent []byte) (*ecdsa.PrivateKey, error) {
 
 	return ecdsaPrivateKey, nil
 }
+
 func GetEcdsaPrivateKeyFromFile(filename string) (*ecdsa.PrivateKey, error) {
 	content, err := readFileUsingFilename(filename)
 	if err != nil {
@@ -348,6 +350,7 @@ func GetEcdsaPrivateKeyFromFile(filename string) (*ecdsa.PrivateKey, error) {
 
 	return GetEcdsaPrivateKeyFromJson(content)
 }
+
 func GetEcdsaPublicKeyFromJson(jsonContent []byte) (*ecdsa.PublicKey, error) {
 	publicKey := new(ECDSAPublicKey)
 	err := json.Unmarshal(jsonContent, publicKey)
@@ -366,6 +369,7 @@ func GetEcdsaPublicKeyFromJson(jsonContent []byte) (*ecdsa.PublicKey, error) {
 
 	return ecdsaPublicKey, nil
 }
+
 func GetEcdsaPublicKeyFromFile(filename string) (*ecdsa.PublicKey, error) {
 	content, err := readFileUsingFilename(filename)
 	if err != nil {
