@@ -718,4 +718,22 @@ func main() {
 	log.Printf("Hierarchical threhold sig end...")
 
 	// --- 验证分层门限签名 end ---
+
+	// --- 验证BLS签名 start ---
+
+	// 生成BLS密钥对
+	privateKeyBLS, publicKeyBLS := xcc.GenerateBlsKeyPair()
+
+	// 验证BLS签名算法
+	blsSig, err := xcc.SignBls(privateKeyBLS, msg)
+	log.Printf("BLS signature is %s and err is %v", blsSig, err)
+
+	isSignatureMatch, err = xcc.VerifyBlsSig(publicKeyBLS, blsSig, msg)
+	log.Printf("Verifying & Unmashalling BLS signature, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
+
+	_, publicKeyBLS2 := xcc.GenerateBlsKeyPair()
+	isSignatureMatch, err = xcc.VerifyBlsSig(publicKeyBLS2, blsSig, msg)
+	log.Printf("Verifying & Unmashalling BLS signature using publicKeyBLS2, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
+
+	// --- 验证BLS签名 end ---
 }
