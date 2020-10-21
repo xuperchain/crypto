@@ -105,8 +105,6 @@ func Sign(privateKey *ecdsa.PrivateKey, message []byte) (schnorrSignature []byte
 		return nil, err
 	}
 
-	return sigContent, nil
-
 	// construct the XuperSignature
 	// 组装超级签名
 	xuperSig := &common.XuperSignature{

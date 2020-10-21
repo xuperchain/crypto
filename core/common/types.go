@@ -16,6 +16,8 @@ const (
 	MultiSig = "MultiSig"
 	// 门限签名算法
 	TssSig = "TssSig"
+	// Bls签名算法
+	BlsSig = "BlsSig"
 )
 
 // --- 签名数据结构相关 start ---
@@ -62,6 +64,11 @@ type MultiSignature struct {
 type TssSignature struct {
 	S []byte
 	R []byte
+}
+
+// BLS签名
+type BlsSignature struct {
+	S []byte
 }
 
 // --- 签名数据结构相关 end ---

@@ -14,6 +14,7 @@ import (
 
 	"github.com/xuperchain/crypto/client/service/base"
 	"github.com/xuperchain/crypto/common/account"
+	"github.com/xuperchain/crypto/core/bls_sign"
 	"github.com/xuperchain/crypto/core/config"
 	"github.com/xuperchain/crypto/core/ecies"
 	"github.com/xuperchain/crypto/core/hash"
@@ -585,6 +586,25 @@ func (xcc *XchainCryptoClient) VerifyTssSig(key *ecdsa.PublicKey, signature, mes
 }
 
 // --- 门限签名相关 end ---
+
+// --- BLS签名相关 start ---
+
+// BLS签名算法 生成公钥和私钥对
+func (xcc *XchainCryptoClient) GenerateBlsKeyPair() (*bls_sign.PrivateKey, *bls_sign.PublicKey) {
+	return bls_sign.GenerateKeyPair()
+}
+
+// BLS签名算法 生成统一签名XuperSignature
+func (xcc *XchainCryptoClient) SignBls(privateKey *bls_sign.PrivateKey, message []byte) (blsSignature []byte, err error) {
+	return bls_sign.Sign(privateKey, message)
+}
+
+// 使用BLS公钥来进行门限签名的验证  -- 外部函数，因为椭圆曲线的原因，暂时无法成为内部函数，供统一验签函数调用
+func (xcc *XchainCryptoClient) VerifyBlsSig(key *bls_sign.PublicKey, signature, message []byte) (bool, error) {
+	return bls_sign.Verify(key, signature, message)
+}
+
+// --- BLS签名相关 end ---
 
 // --- XuperSignature 统一签名相关 start ---
 
