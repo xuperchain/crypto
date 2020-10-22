@@ -1,19 +1,24 @@
 package ecc
 
 import (
-	//	"bytes"
 	"crypto/elliptic"
-	//	"encoding/binary"
-	//	"encoding/json"
+	"encoding/json"
 	"errors"
-	//	"fmt"
+	"fmt"
 	"math/big"
+
+	"github.com/xuperchain/crypto/gm/gmsm/sm2"
 )
 
 type Point struct {
 	Curve elliptic.Curve
 	X     *big.Int
 	Y     *big.Int
+}
+
+type ECPoint struct {
+	Curvname string
+	X, Y     *big.Int
 }
 
 func NewPoint(curve elliptic.Curve, x, y *big.Int) (*Point, error) {
@@ -25,6 +30,45 @@ func NewPoint(curve elliptic.Curve, x, y *big.Int) (*Point, error) {
 
 func newPoint(curve elliptic.Curve, x, y *big.Int) *Point {
 	return &Point{Curve: curve, X: x, Y: y}
+}
+
+func (p *Point) ToString() (string, error) {
+	// 转换为自定义的数据结构
+	point := getECPoint(p)
+
+	// 转换json
+	data, err := json.Marshal(point)
+
+	return string(data), err
+}
+
+func getECPoint(p *Point) *ECPoint {
+	point := new(ECPoint)
+	point.Curvname = p.Curve.Params().Name
+	point.X = p.X
+	point.Y = p.Y
+
+	return point
+}
+
+func NewPointFromString(pointStr string) (*Point, error) {
+	jsonContent := []byte(pointStr)
+	ecPoint := new(ECPoint)
+	err := json.Unmarshal(jsonContent, ecPoint)
+	if err != nil {
+		return nil, err //json有问题
+	}
+
+	curve := elliptic.P256()
+	if ecPoint.Curvname != "P-256" || ecPoint.Curvname != "SM2-P-256" {
+		err = fmt.Errorf("curve [%v] is not supported yet.", ecPoint.Curvname)
+		return nil, err
+	}
+	if ecPoint.Curvname == "SM2-P-256" {
+		curve = sm2.P256Sm2()
+	}
+
+	return NewPoint(curve, ecPoint.X, ecPoint.Y)
 }
 
 func (p *Point) Add(p1 *Point) (*Point, error) {
