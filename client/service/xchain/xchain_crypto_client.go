@@ -499,16 +499,41 @@ func (xcc *XchainCryptoClient) ZkpVerifyMiMC(proof *groth16_bn256.Proof, vk *gro
 // -- STEP 1: DKG - distributed key generation --
 // distributed private key generation and distributed public key generation
 
+// - method 1 start -
+// 一个步骤整体
 // 所有潜在参与节点根据门限目标生成产生本地秘密和验证点的私钥碎片
 // minimumShareNumber可以理解为threshold，至少需要minimumShareNumber个潜在参与节点进行实际参与才能完成门限签名
 func (xcc *XchainCryptoClient) GetLocalShares(totalShareNumber, minimumShareNumber int) (shares map[int]*big.Int, points []*ecc.Point, err error) {
 	return dkg.LocalSecretShareGenerateWithVerifyPoints(totalShareNumber, minimumShareNumber)
 }
 
+// - method 1 end -
+
+// - method 2 start -
+// 分步骤
+// 为产生本地秘密的私钥碎片做准备，预先生成好一个目标多项式
+// minimumShareNumber可以理解为threshold，至少需要minimumShareNumber个潜在参与节点进行实际参与才能完成门限签名
+func (xcc *XchainCryptoClient) GetPolynomialForSecretShareGenerate(totalShareNumber, minimumShareNumber int) ([]*big.Int, error) {
+	return dkg.GetPolynomialForSecretShareGenerate(totalShareNumber, minimumShareNumber)
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式生成验证点
+func (xcc *XchainCryptoClient) GetVerifyPointByPolynomial(poly []*big.Int) (*ecc.Point, error) {
+	return dkg.GetVerifyPointByPolynomial(poly)
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式和节点index生成对应的碎片
+func (xcc *XchainCryptoClient) GetSpecifiedSecretShareByPolynomial(poly []*big.Int, index *big.Int) *big.Int {
+	return dkg.GetSpecifiedSecretShareByPolynomial(poly, index)
+}
+
+// - method 2 end -
+
 // ---
 // TODO: 网络层，各个潜在参与节点将对应的密钥碎片和验证点数据发送给对应的其它潜在参与节点
 // shares的key就是目标对应节点的index
 // 每个潜在参与节点都有一个unique的index作为标志
+// 网络层在其他的模块进行实现
 // ---
 
 // 每个潜在参与节点根据所收集的所有的与自己相关的碎片(自己的Index是X值，收集所有该X值对应的Y值)，

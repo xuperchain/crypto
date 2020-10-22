@@ -46,6 +46,47 @@ type (
 	}
 )
 
+// 为产生本地秘密的私钥碎片做准备，预先生成好一个目标多项式
+// minimumShareNumber可以理解为threshold
+func GetPolynomialForSecretShareGenerate(totalShareNumber, minimumShareNumber int) ([]*big.Int, error) {
+	// 1. calculate "partial" key share
+	secret, err := walletRand.GenerateEntropy(120)
+	if err != nil {
+		return nil, err
+	}
+
+	curve := elliptic.P256()
+
+	// 2. compute the polynomial for generating the shares and the verify points in the future
+	poly, err := secret_share.ComplexSecretToPolynomial(totalShareNumber, minimumShareNumber, secret, curve)
+	if err != nil {
+		return nil, err
+	}
+
+	return poly, nil
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式生成验证点
+func GetVerifyPointByPolynomial(poly []*big.Int) (*ecc.Point, error) {
+	curve := elliptic.P256()
+
+	point, err := secret_share.GetVerifyPointByPolynomial(poly, curve)
+	if err != nil {
+		return nil, err
+	}
+
+	return point, nil
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式和节点index生成对应的碎片
+func GetSpecifiedSecretShareByPolynomial(poly []*big.Int, index *big.Int) *big.Int {
+	curve := elliptic.P256()
+
+	share := secret_share.GetSpecifiedSecretShareByPolynomial(poly, index, curve)
+
+	return share
+}
+
 // 产生本地秘密的私钥碎片，可以把每个碎片理解为一个坐标点。 key: partner index，也就是x坐标, value: 实际数值，也就是y坐标
 // minimumShareNumber可以理解为threshold
 func LocalSecretShareGenerateWithVerifyPoints(totalShareNumber, minimumShareNumber int) (shares map[int]*big.Int, points []*ecc.Point, err error) {
