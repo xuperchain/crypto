@@ -35,23 +35,14 @@ var (
 // 4. So we get W shares, which are (x, y) pairs
 // 5. Now encode each pair to a byte slice
 func ComplexSecretSplit(totalShareNumber, minimumShareNumber int, secret []byte, curve elliptic.Curve) (shares map[int]*big.Int, err error) {
-	// Check the parameters
-	if totalShareNumber < 2 {
-		return nil, InvaildTotalShareNumberError
-	}
-
-	if minimumShareNumber > totalShareNumber {
-		return nil, InvaildShareNumberError
-	}
-
-	polynomialClient := polynomial.New(curve.Params().N)
-
-	poly, err := polynomialClient.RandomGenerate(minimumShareNumber-1, secret)
+	poly, err := ComplexSecretToPolynomial(totalShareNumber, minimumShareNumber, secret, curve)
 	if err != nil {
 		return nil, err
 	}
 
 	//	log.Printf("The asc order coefficients of the polynomial is: %v", poly)
+
+	polynomialClient := polynomial.New(curve.Params().N)
 
 	// Evaluate the polynomial for several times, in order to get all the shares.
 	shares = make(map[int]*big.Int, totalShareNumber)
@@ -64,18 +55,7 @@ func ComplexSecretSplit(totalShareNumber, minimumShareNumber int, secret []byte,
 }
 
 func ComplexSecretSplitWithVerifyPoints(totalShareNumber, minimumShareNumber int, secret []byte, curve elliptic.Curve) (shares map[int]*big.Int, points []*ecc.Point, err error) {
-	// Check the parameters
-	if totalShareNumber < 2 {
-		return nil, nil, InvaildTotalShareNumberError
-	}
-
-	if minimumShareNumber > totalShareNumber {
-		return nil, nil, InvaildShareNumberError
-	}
-
-	polynomialClient := polynomial.New(curve.Params().N)
-
-	poly, err := polynomialClient.RandomGenerate(minimumShareNumber-1, secret)
+	poly, err := ComplexSecretToPolynomial(totalShareNumber, minimumShareNumber, secret, curve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,6 +77,8 @@ func ComplexSecretSplitWithVerifyPoints(totalShareNumber, minimumShareNumber int
 	jsonPoints, _ := json.Marshal(points)
 	log.Printf("json points is: %s", jsonPoints)
 
+	polynomialClient := polynomial.New(curve.Params().N)
+
 	// Evaluate the polynomial for several times, in order to get all the shares.
 	shares = make(map[int]*big.Int, totalShareNumber)
 	for x := 1; x <= totalShareNumber; x++ {
@@ -105,4 +87,45 @@ func ComplexSecretSplitWithVerifyPoints(totalShareNumber, minimumShareNumber int
 	//	log.Printf("shares is: %v", shares)
 
 	return shares, points, nil
+}
+
+func ComplexSecretToPolynomial(totalShareNumber, minimumShareNumber int, secret []byte, curve elliptic.Curve) ([]*big.Int, error) {
+	// Check the parameters
+	if totalShareNumber < 2 {
+		return nil, InvaildTotalShareNumberError
+	}
+
+	if minimumShareNumber > totalShareNumber {
+		return nil, InvaildShareNumberError
+	}
+
+	polynomialClient := polynomial.New(curve.Params().N)
+
+	poly, err := polynomialClient.RandomGenerate(minimumShareNumber-1, secret)
+	if err != nil {
+		return nil, err
+	}
+
+	return poly, nil
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式生成验证点
+func GetVerifyPointByPolynomial(poly []*big.Int, curve elliptic.Curve) (*ecc.Point, error) {
+	x, y := elliptic.P256().ScalarBaseMult(poly[0].Bytes())
+	point, err := ecc.NewPoint(curve, x, y)
+	if err != nil {
+		return nil, err
+	}
+
+	return point, nil
+}
+
+// 为产生本地秘密的私钥碎片做准备，通过目标多项式和节点index生成对应的碎片
+func GetSpecifiedSecretShareByPolynomial(poly []*big.Int, index *big.Int, curve elliptic.Curve) *big.Int {
+	polynomialClient := polynomial.New(curve.Params().N)
+
+	// Evaluate the polynomial with the specified index, in order to get the shares.
+	share := polynomialClient.Evaluate(poly, index)
+
+	return share
 }
