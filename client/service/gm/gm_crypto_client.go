@@ -85,9 +85,15 @@ func (gcc *GmCryptoClient) GetEcdsaPrivateKeyJsonFormatStr(k *ecdsa.PrivateKey) 
 	return jsonEcdsaPrivateKeyJsonFormat, err
 }
 
-// 获取ECC公钥的json格式的表达
+// 通过私钥获取ECC公钥的json格式的表达
 func (gcc *GmCryptoClient) GetEcdsaPublicKeyJsonFormatStr(k *ecdsa.PrivateKey) (string, error) {
 	jsonEcdsaPublicKeyJsonFormat, err := accountUtil.GetEcdsaPublicKeyJsonFormat(k)
+	return jsonEcdsaPublicKeyJsonFormat, err
+}
+
+// 通过公钥获取ECC公钥的json格式的表达的字符串
+func (gcc *GmCryptoClient) GetEcdsaPublicKeyJsonFormatStrFromPublicKey(k *ecdsa.PublicKey) (string, error) {
+	jsonEcdsaPublicKeyJsonFormat, err := accountUtil.GetEcdsaPublicKeyJsonFormatFromPublicKey(k)
 	return jsonEcdsaPublicKeyJsonFormat, err
 }
 
