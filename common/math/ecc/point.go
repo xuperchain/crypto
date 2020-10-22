@@ -60,7 +60,7 @@ func NewPointFromString(pointStr string) (*Point, error) {
 	}
 
 	curve := elliptic.P256()
-	if ecPoint.Curvname != "P-256" || ecPoint.Curvname != "SM2-P-256" {
+	if ecPoint.Curvname != "P-256" && ecPoint.Curvname != "SM2-P-256" {
 		err = fmt.Errorf("curve [%v] is not supported yet.", ecPoint.Curvname)
 		return nil, err
 	}
