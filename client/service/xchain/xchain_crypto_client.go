@@ -33,6 +33,8 @@ import (
 	"github.com/xuperchain/crypto/core/threshold/schnorr/dkg"
 	"github.com/xuperchain/crypto/core/threshold/schnorr/tss_sign"
 
+	"github.com/xuperchain/crypto/common/utils"
+
 	accountUtil "github.com/xuperchain/crypto/core/account"
 	aesUtil "github.com/xuperchain/crypto/core/aes"
 	hd "github.com/xuperchain/crypto/core/hdwallet/api"
@@ -277,6 +279,12 @@ func (xcc *XchainCryptoClient) SplitPrivateKey(jsonPrivateKey string, totalShare
 func (xcc *XchainCryptoClient) RetrievePrivateKeyByShares(jsonPrivateKeyShares []string) (string, error) {
 	jsonPrivateKey, err := accountUtil.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
 	return jsonPrivateKey, err
+}
+
+// 将私钥的曲线转化为secp256k1，并重新计算包含的公钥
+func (xcc *XchainCryptoClient) ChangePrivCurveToS256k1(key *ecdsa.PrivateKey) *ecdsa.PrivateKey {
+	newPriv := utils.ChangePrivCurveToS256k1(key)
+	return newPriv
 }
 
 // --- 账户相关 end ---

@@ -736,4 +736,12 @@ func main() {
 	log.Printf("Verifying & Unmashalling BLS signature using publicKeyBLS2, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
 
 	// --- 验证BLS签名 end ---
+
+	// --- 测试密钥椭圆曲线更换 start ---
+
+	s256PrivateKeyE1 := xcc.ChangePrivCurveToS256k1(localPrivateKeyE1)
+	jsonS256PrivateKeyE1, _ := json.Marshal(s256PrivateKeyE1)
+	log.Printf("s256PrivateKeyE1 is: %s", jsonS256PrivateKeyE1)
+
+	// --- 测试密钥椭圆曲线更换 end ---
 }
