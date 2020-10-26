@@ -19,6 +19,8 @@ import (
 	"github.com/xuperchain/crypto/gm/sign"
 	"github.com/xuperchain/crypto/gm/signature"
 
+	"github.com/xuperchain/crypto/common/utils"
+
 	accountUtil "github.com/xuperchain/crypto/gm/account"
 	aesUtil "github.com/xuperchain/crypto/gm/aes"
 	hd "github.com/xuperchain/crypto/gm/hdwallet/api"
@@ -247,6 +249,12 @@ func (gcc *GmCryptoClient) SplitPrivateKey(jsonPrivateKey string, totalShareNumb
 func (gcc *GmCryptoClient) RetrievePrivateKeyByShares(jsonPrivateKeyShares []string) (string, error) {
 	jsonPrivateKey, err := accountUtil.RetrievePrivateKeyByShares(jsonPrivateKeyShares)
 	return jsonPrivateKey, err
+}
+
+// 将私钥的曲线转化为secp256k1，并重新计算包含的公钥
+func (gcc *GmCryptoClient) ChangePrivCurveToS256k1(key *ecdsa.PrivateKey) *ecdsa.PrivateKey {
+	newPriv := utils.ChangePrivCurveToS256k1(key)
+	return newPriv
 }
 
 // --- 账户相关 end ---
