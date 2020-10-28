@@ -480,12 +480,14 @@ func (xcc *XchainCryptoClient) DecryptByHdKey(publicKey, privateAncestorKey, cyp
 // --- secret_share 秘密分享算法相关 start ---
 
 // 将秘密分割为碎片，totalShareNumber为碎片数量，minimumShareNumber为需要至少多少碎片才能还原出信息
-func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte, curve elliptic.Curve) (shares map[int]*big.Int, err error) {
+func (xcc *XchainCryptoClient) SecretSplit(totalShareNumber, minimumShareNumber int, secret []byte) (shares map[int]*big.Int, err error) {
+	curve := elliptic.P256()
 	return complex_secret_share.ComplexSecretSplit(totalShareNumber, minimumShareNumber, secret, curve)
 }
 
 // 通过收集到的碎片来还原出秘密
-func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int, curve elliptic.Curve) ([]byte, error) {
+func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, error) {
+	curve := elliptic.P256()
 	return complex_secret_share.ComplexSecretRetrieve(shares, curve)
 }
 
