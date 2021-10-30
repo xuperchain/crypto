@@ -190,14 +190,6 @@ func (priv *PrivateKey) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts)
 	return signer.Sign()
 }
 
-func (priv *PrivateKey) SignAsm(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
-	r, s, err := SignAsm(priv, msg)
-	if err != nil {
-		return nil, err
-	}
-	return asn1.Marshal(sm2Signature{r, s})
-}
-
 func (priv *PrivateKey) Decrypt(data []byte) ([]byte, error) {
 	return Decrypt(priv, data)
 }
@@ -210,16 +202,6 @@ func (pub *PublicKey) Verify(msg []byte, sign []byte) bool {
 		return false
 	}
 	return Verify(pub, msg, sm2Sign.R, sm2Sign.S)
-}
-
-func (pub *PublicKey) VerifyAsm(msg []byte, sign []byte) bool {
-	var sm2Sign sm2Signature
-
-	_, err := asn1.Unmarshal(sign, &sm2Sign)
-	if err != nil {
-		return false
-	}
-	return VerifyAsm(pub, msg, sm2Sign.R, sm2Sign.S)
 }
 
 func (pub *PublicKey) Encrypt(data []byte) ([]byte, error) {
@@ -286,118 +268,6 @@ func GenerateKey() (*PrivateKey, error) {
 	priv.D = k
 	priv.PublicKey.X, priv.PublicKey.Y = c.ScalarBaseMult(k.Bytes())
 	return priv, nil
-}
-
-func GenerateKeyAsm() (*PrivateKey, error) {
-	c := elliptic.P256()
-	k, err := randFieldElement(c, rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	priv := new(PrivateKey)
-	priv.PublicKey.Curve = c
-	priv.D = k
-	priv.PublicKey.X, priv.PublicKey.Y = c.ScalarBaseMult(k.Bytes())
-	return priv, nil
-}
-
-func SignAsm(priv *PrivateKey, hash []byte) (r, s *big.Int, err error) {
-	entropylen := (priv.Curve.Params().BitSize + 7) / 16
-	if entropylen > 32 {
-		entropylen = 32
-	}
-	entropy := make([]byte, entropylen)
-	_, err = io.ReadFull(rand.Reader, entropy)
-	if err != nil {
-		return
-	}
-
-	// Initialize an SHA-512 hash context; digest ...
-	md := sha512.New()
-	md.Write(priv.D.Bytes()) // the private key,
-	md.Write(entropy)        // the entropy,
-	md.Write(hash)           // and the input hash;
-	key := md.Sum(nil)[:32]  // and compute ChopMD-256(SHA-512),
-	// which is an indifferentiable MAC.
-
-	// Create an AES-CTR instance to use as a CSPRNG.
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create a CSPRNG that xors a stream of zeros with
-	// the output of the AES-CTR instance.
-	csprng := cipher.StreamReader{
-		R: zeroReader,
-		S: cipher.NewCTR(block, []byte(aesIV)),
-	}
-
-	// See [NSA] 3.4.1
-	c := priv.PublicKey.Curve
-	N := c.Params().N
-	if N.Sign() == 0 {
-		return nil, nil, errZeroParam
-	}
-	var k *big.Int
-	e := new(big.Int).SetBytes(hash)
-	for { // 调整算法细节以实现SM2
-		for {
-			k, err = randFieldElement(c, csprng)
-			if err != nil {
-				r = nil
-				return
-			}
-			r, _ = priv.Curve.ScalarBaseMult(k.Bytes())
-			r.Add(r, e)
-			r.Mod(r, N)
-			if r.Sign() != 0 {
-				break
-			}
-			if t := new(big.Int).Add(r, k); t.Cmp(N) == 0 {
-				break
-			}
-		}
-		rD := new(big.Int).Mul(priv.D, r)
-		s = new(big.Int).Sub(k, rD)
-		d1 := new(big.Int).Add(priv.D, one)
-		d1Inv := new(big.Int).ModInverse(d1, N)
-		s.Mul(s, d1Inv)
-		s.Mod(s, N)
-		if s.Sign() != 0 {
-			break
-		}
-	}
-	return
-}
-
-func VerifyAsm(pub *PublicKey, hash []byte, r, s *big.Int) bool {
-	c := pub.Curve
-	N := c.Params().N
-
-	if r.Sign() <= 0 || s.Sign() <= 0 {
-		return false
-	}
-	if r.Cmp(N) >= 0 || s.Cmp(N) >= 0 {
-		return false
-	}
-
-	// 调整算法细节以实现SM2
-	t := new(big.Int).Add(r, s)
-	t.Mod(t, N)
-	if t.Sign() == 0 {
-		return false
-	}
-
-	var x *big.Int
-	x1, y1 := c.ScalarBaseMult(s.Bytes())
-	x2, y2 := c.ScalarMult(pub.X, pub.Y, t.Bytes())
-	x, _ = c.Add(x1, y1, x2, y2)
-
-	e := new(big.Int).SetBytes(hash)
-	x.Add(x, e)
-	x.Mod(x, N)
-	return x.Cmp(r) == 0
 }
 
 var errZeroParam = errors.New("zero parameter")

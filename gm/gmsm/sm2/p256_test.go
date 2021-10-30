@@ -9,6 +9,112 @@ import (
 	"testing"
 )
 
+func sm2P256Mul_core(a, b *sm2P256FieldElement) (tmp sm2P256LargeFieldElement) {
+	tmp[0] = uint64(a[0]) * uint64(b[0])
+
+	tmp[1] = uint64(a[0]) * uint64(b[1])
+	tmp[1] += uint64(a[1]) * uint64(b[0])
+
+	tmp[2] = uint64(a[0]) * uint64(b[2])
+	tmp[2] += uint64(a[1]) * (uint64(b[1]) << 1)
+	tmp[2] += uint64(a[2]) * uint64(b[0])
+
+	tmp[3] = uint64(a[0]) * uint64(b[3])
+	tmp[3] += uint64(a[1]) * uint64(b[2])
+	tmp[3] += uint64(a[2]) * uint64(b[1])
+	tmp[3] += uint64(a[3]) * uint64(b[0])
+
+	tmp[4] = uint64(a[1]) * uint64(b[3])
+	tmp[4] += uint64(a[3]) * uint64(b[1])
+	tmp[4] <<= 1
+	tmp[4] += uint64(a[0]) * uint64(b[4])
+	tmp[4] += uint64(a[2]) * uint64(b[2])
+	tmp[4] += uint64(a[4]) * uint64(b[0])
+
+	tmp[5] = uint64(a[0]) * uint64(b[5])
+	tmp[5] += uint64(a[1]) * uint64(b[4])
+	tmp[5] += uint64(a[2]) * uint64(b[3])
+	tmp[5] += uint64(a[3]) * uint64(b[2])
+	tmp[5] += uint64(a[4]) * uint64(b[1])
+	tmp[5] += uint64(a[5]) * uint64(b[0])
+
+	tmp[6] = uint64(a[1]) * uint64(b[5])
+	tmp[6] += uint64(a[3]) * uint64(b[3])
+	tmp[6] += uint64(a[5]) * uint64(b[1])
+	tmp[6] <<= 1
+	tmp[6] += uint64(a[0]) * uint64(b[6])
+	tmp[6] += uint64(a[2]) * uint64(b[4])
+	tmp[6] += uint64(a[4]) * uint64(b[2])
+	tmp[6] += uint64(a[6]) * uint64(b[0])
+
+	tmp[7] = uint64(a[0]) * uint64(b[7])
+	tmp[7] += uint64(a[1]) * uint64(b[6])
+	tmp[7] += uint64(a[2]) * uint64(b[5])
+	tmp[7] += uint64(a[3]) * uint64(b[4])
+	tmp[7] += uint64(a[4]) * uint64(b[3])
+	tmp[7] += uint64(a[5]) * uint64(b[2])
+	tmp[7] += uint64(a[6]) * uint64(b[1])
+	tmp[7] += uint64(a[7]) * uint64(b[0])
+
+	tmp[8] = uint64(a[1]) * uint64(b[7])
+	tmp[8] += uint64(a[3]) * uint64(b[5])
+	tmp[8] += uint64(a[5]) * uint64(b[3])
+	tmp[8] += uint64(a[7]) * uint64(b[1])
+	tmp[8] <<= 1
+	tmp[8] += uint64(a[0]) * uint64(b[8])
+	tmp[8] += uint64(a[2]) * uint64(b[6])
+	tmp[8] += uint64(a[4]) * uint64(b[4])
+	tmp[8] += uint64(a[6]) * uint64(b[2])
+	tmp[8] += uint64(a[8]) * uint64(b[0])
+
+	tmp[9] = uint64(a[1]) * uint64(b[8])
+	tmp[9] += uint64(a[2]) * uint64(b[7])
+	tmp[9] += uint64(a[3]) * uint64(b[6])
+	tmp[9] += uint64(a[4]) * uint64(b[5])
+	tmp[9] += uint64(a[5]) * uint64(b[4])
+	tmp[9] += uint64(a[6]) * uint64(b[3])
+	tmp[9] += uint64(a[7]) * uint64(b[2])
+	tmp[9] += uint64(a[8]) * uint64(b[1])
+
+	tmp[10] = uint64(a[3]) * uint64(b[7])
+	tmp[10] += uint64(a[5]) * uint64(b[5])
+	tmp[10] += uint64(a[7]) * uint64(b[3])
+	tmp[10] <<= 1
+	tmp[10] += uint64(a[2]) * uint64(b[8])
+	tmp[10] += uint64(a[4]) * uint64(b[6])
+	tmp[10] += uint64(a[6]) * uint64(b[4])
+	tmp[10] += uint64(a[8]) * uint64(b[2])
+
+	tmp[11] = uint64(a[3]) * uint64(b[8])
+	tmp[11] += uint64(a[4]) * uint64(b[7])
+	tmp[11] += uint64(a[5]) * uint64(b[6])
+	tmp[11] += uint64(a[6]) * uint64(b[5])
+	tmp[11] += uint64(a[7]) * uint64(b[4])
+	tmp[11] += uint64(a[8]) * uint64(b[3])
+
+	tmp[12] = uint64(a[5]) * uint64(b[7])
+	tmp[12] += uint64(a[7]) * uint64(b[5])
+	tmp[12] <<= 1
+	tmp[12] += uint64(a[4]) * uint64(b[8])
+	tmp[12] += uint64(a[6]) * uint64(b[6])
+	tmp[12] += uint64(a[8]) * uint64(b[4])
+
+	tmp[13] = uint64(a[5]) * uint64(b[8])
+	tmp[13] += uint64(a[6]) * uint64(b[7])
+	tmp[13] += uint64(a[7]) * uint64(b[6])
+	tmp[13] += uint64(a[8]) * uint64(b[5])
+
+	tmp[14] = uint64(a[6]) * uint64(b[8])
+	tmp[14] += uint64(a[7]) * uint64(b[7]) << 1
+	tmp[14] += uint64(a[8]) * uint64(b[6])
+
+	tmp[15] = uint64(a[7]) * uint64(b[8])
+	tmp[15] += uint64(a[8]) * uint64(b[7])
+
+	tmp[16] = uint64(a[8]) * uint64(b[8])
+	return
+}
+
 func randomNumber() (ret *big.Int, err error) {
 	bitSize := 256
 	b := make([]byte, bitSize/8+8)
@@ -345,11 +451,6 @@ func BenchmarkSm2P256Curve_ScalarBaseMult(b *testing.B) {
 	k, _ := new(big.Int).SetString(e.k, 10)
 	b.ReportAllocs()
 	b.StartTimer()
-	//b.RunParallel(func(pb *testing.PB) {
-	//	for pb.Next() {
-	//		p256.ScalarBaseMult(k.Bytes())
-	//	}
-	//})
 	for i := 0; i < b.N; i++ {
 		sm2P256.ScalarBaseMult(k.Bytes())
 	}
@@ -403,7 +504,100 @@ func BenchmarkScalarMultP256(b *testing.B) {
 	//})
 }
 
-func BenchmarkPointAddMixed(b *testing.B) {
+func TestSM2Square(t *testing.T) {
+	a := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	c := sm2P256FieldElement{19019391, 84912409, 1025760432, 156511594, 430707246, 52894858, 115667788, 70162044, 20023025}
+	d1 := sm2P256FieldElement{0}
+	d2 := sm2P256FieldElement{0}
+	d3 := sm2P256FieldElement{0}
+	d4 := sm2P256FieldElement{0}
+
+	sm2P256Square(&d1, &a)
+	sm2P256Square(&d2, &c)
+	sm2P256Square2Way(&d3, &a, &d4, &c)
+	for i := 0; i < 9; i++ {
+		if d1[i] != d3[i] {
+			fmt.Printf("d1[%d] = %d, d3[%d] = %d\n", i, d1[i], i, d3[i])
+			t.Fail()
+		}
+		if d2[i] != d4[i] {
+			fmt.Printf("d2[%d] = %d, d4[%d] = %d\n", i, d2[i], i, d4[i])
+			t.Fail()
+		}
+	}
+}
+
+func BenchmarkSquareAVX(b *testing.B) {
+	a := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	c := sm2P256FieldElement{19019391, 84912409, 1025760432, 156511594, 430707246, 52894858, 115667788, 70162044, 20023025}
+	d1 := sm2P256FieldElement{0}
+	d2 := sm2P256FieldElement{0}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sm2P256Square2Way(&d1, &a, &d2, &c)
+	}
+}
+
+func TestSM2Mul(t *testing.T) {
+	a := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	c := sm2P256FieldElement{19019391, 84912409, 1025760432, 156511594, 430707246, 52894858, 115667788, 70162044, 20023025}
+	a2 := sm2P256FieldElement{44419564, 133919556, 1061885959, 50387380, 468486459, 247299943, 98757672, 129960609, 475589744}
+	c2 := sm2P256FieldElement{321953226, 35389897, 323421741, 235419543, 258035370, 154164156, 272819309, 266492358, 464080382}
+	d := sm2P256FieldElement{0}
+	d2 := sm2P256FieldElement{0}
+	d3 := sm2P256FieldElement{0}
+	d4 := sm2P256FieldElement{0}
+	sm2P256Mul(&d, &a, &c)
+	sm2P256Mul(&d2, &a2, &c2)
+	sm2P256Mul2Way(&d3, &a, &c, &d4, &a2, &c2)
+	for i := 0; i < 9; i++ {
+		if d[i] != d3[i] {
+			fmt.Printf("d1[%d] = %d, d3[%d] = %d\n", i, d[i], i, d3[i])
+			t.Fail()
+		}
+		if d2[i] != d4[i] {
+			fmt.Printf("d2[%d] = %d, d4[%d] = %d\n", i, d2[i], i, d4[i])
+			t.Fail()
+		}
+	}
+}
+
+func TestReduceDegree(t *testing.T) {
+	var tmp1, tmp2 sm2P256LargeFieldElement
+	a := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	c := sm2P256FieldElement{19019391, 84912409, 1025760432, 156511594, 430707246, 52894858, 115667788, 70162044, 20023025}
+	a2 := sm2P256FieldElement{44419564, 133919556, 1061885959, 50387380, 468486459, 247299943, 98757672, 129960609, 475589744}
+	c2 := sm2P256FieldElement{321953226, 35389897, 323421741, 235419543, 258035370, 154164156, 272819309, 266492358, 464080382}
+	d1 := sm2P256FieldElement{0}
+	d2 := sm2P256FieldElement{0}
+	d3 := sm2P256FieldElement{0}
+	d4 := sm2P256FieldElement{0}
+	tmp1 = sm2P256Mul_core(&a, &c)
+	tmp2 = sm2P256Mul_core(&a2, &c2)
+	sm2P256ReduceDegree(&d1, &tmp1)
+	sm2P256ReduceDegree(&d2, &tmp2)
+	sm2P256ReduceDegree2Way(&d3, &d4, &tmp1, &tmp2)
+	for i := 0; i < 9; i++ {
+		if d1[i] != d3[i] {
+			fmt.Printf("d1[%d] = %d, d3[%d] = %d\n", i, d1[i], i, d3[i])
+			t.Fail()
+		}
+		if d2[i] != d4[i] {
+			fmt.Printf("d2[%d] = %d, d4[%d] = %d\n", i, d2[i], i, d4[i])
+			t.Fail()
+		}
+	}
+}
+
+func TestPointDouble(t *testing.T) {
+	a := sm2P256FieldElement{281252849, 245621074, 966355530, 36820016, 446516075, 97951862, 129691113, 158366304, 464469397}
+	c := sm2P256FieldElement{44419564, 133919556, 1061885959, 50387380, 468486459, 247299943, 98757672, 129960609, 475589744}
+	d := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	sm2P256PointDouble(&a, &c, &d, &a, &c, &d)
+}
+
+func BenchmarkPointAddMixedAVX(b *testing.B) {
 	var xout, yout, zout sm2P256FieldElement
 	x1 := sm2P256FieldElement{0x11902a0, 0x6c29cc9, 0x1d5ffbe6, 0xdb0b4c7, 0x10144c14, 0x2f2b719, 0x301189, 0x2343336, 0xa0bf2ac}
 	x2 := sm2P256FieldElement{0xc3cf512, 0x39ed486, 0xf4d15fa, 0xf9167fd, 0x1c1f5dd5, 0xc21a53e, 0x1897930, 0x957a112, 0x21059a0}
@@ -414,5 +608,32 @@ func BenchmarkPointAddMixed(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sm2P256PointAddMixed(&xout, &yout, &zout, &x1, &y1, &z1, &x2, &y2)
+	}
+}
+
+func BenchmarkPointDoubleAVX(b *testing.B) {
+	var xout, yout, zout sm2P256FieldElement
+	a := sm2P256FieldElement{281252849, 245621074, 966355530, 36820016, 446516075, 97951862, 129691113, 158366304, 464469397}
+	c := sm2P256FieldElement{44419564, 133919556, 1061885959, 50387380, 468486459, 247299943, 98757672, 129960609, 475589744}
+	d := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sm2P256PointDouble(&xout, &yout, &zout, &a, &c, &d)
+	}
+}
+
+func BenchmarkPointAddAVX(b *testing.B) {
+	var xout, yout, zout sm2P256FieldElement
+	x1 := sm2P256FieldElement{0x11902a0, 0x6c29cc9, 0x1d5ffbe6, 0xdb0b4c7, 0x10144c14, 0x2f2b719, 0x301189, 0x2343336, 0xa0bf2ac}
+	y1 := sm2P256FieldElement{0x1a15ad64, 0xa48c8d1, 0x184635a4, 0xb725ef1, 0x11921dcc, 0x3f866df, 0x16c27568, 0xbdf580a, 0xb08f55c}
+	z1 := sm2P256FieldElement{0x1c0a0507, 0xc6d5fed, 0x9a03d8b, 0xa1d22b0, 0x127853e3, 0xc4ac6b8, 0x1a048cf7, 0x9afb72c, 0x65d485d}
+	x2 := sm2P256FieldElement{281252849, 245621074, 966355530, 36820016, 446516075, 97951862, 129691113, 158366304, 464469397}
+	y2 := sm2P256FieldElement{44419564, 133919556, 1061885959, 50387380, 468486459, 247299943, 98757672, 129960609, 475589744}
+	z2 := sm2P256FieldElement{406862363, 81838615, 518199610, 213356114, 48208314, 12670465, 387225316, 157273097, 505796632}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sm2P256PointAdd(&xout, &yout, &zout, &x1, &y1, &z1, &x2, &y2, &z2)
 	}
 }
