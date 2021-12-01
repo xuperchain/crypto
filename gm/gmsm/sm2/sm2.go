@@ -48,36 +48,146 @@ type PrivateKey struct {
 	D *big.Int
 }
 
+type Signer struct {
+	PrivateKey
+	Msg     []byte
+	Entropy []byte
+	AES_key []byte
+	CSPRNG  cipher.StreamReader
+
+	e, k, r, t, s *big.Int
+}
+
 type sm2Signature struct {
 	R, S *big.Int
 }
 
-// The SM2's private key contains the public key
+// Signer
+
+func (signer *Signer) MakeEntropy() (err error) {
+	entropylen := (signer.Curve.Params().BitSize + 7) / 16
+	if entropylen > 32 {
+		entropylen = 32
+	}
+
+	signer.Entropy = make([]byte, entropylen)
+	_, err = io.ReadFull(rand.Reader, signer.Entropy)
+	if err != nil {
+		return err
+	}
+
+	return
+}
+
+func (signer *Signer) MakeAESKey() {
+	md := sha512.New()
+	md.Write(signer.D.Bytes())        // the private key,
+	md.Write(signer.Entropy)          // the entropy,
+	md.Write(signer.Msg)              // and the input hash;
+	signer.AES_key = md.Sum(nil)[:32] // and compute ChopMD-256(SHA-512),
+}
+
+func (signer *Signer) MakeCSPRNG() (err error) {
+	block, err := aes.NewCipher(signer.AES_key)
+	if err != nil {
+		return err
+	}
+
+	signer.CSPRNG = cipher.StreamReader{
+		R: zeroReader,
+		S: cipher.NewCTR(block, []byte(aesIV)),
+	}
+
+	return
+}
+
+func (signer *Signer) IsParamsValid() (valid bool) {
+	return signer.Curve.Params().N.Sign() != 0
+}
+
+// make e, k, r, t
+func (signer *Signer) MakeEKRT() (err error) {
+	signer.e = new(big.Int).SetBytes(signer.Msg)
+	for {
+		signer.k, err = randFieldElement(signer.Curve, signer.CSPRNG)
+		if err != nil {
+			return
+		}
+
+		signer.r, _ = signer.Curve.ScalarBaseMult(signer.k.Bytes())
+		signer.r.Add(signer.r, signer.e)
+		signer.r.Mod(signer.r, signer.Params().N)
+		// TODO: the conditions here should be checked
+		if signer.r.Sign() != 0 {
+			return
+		}
+
+		signer.t = new(big.Int).Add(signer.r, signer.t)
+		if signer.t.Cmp(signer.Params().N) == 0 {
+			return
+		}
+
+	}
+}
+
+func (signer *Signer) MakeSignature() (err error) {
+	for {
+		err = signer.MakeEKRT()
+		if err != nil {
+			return
+		}
+
+		rD := new(big.Int).Mul(signer.D, signer.r)
+		signer.s = new(big.Int).Sub(signer.k, rD)
+		d1 := new(big.Int).Add(signer.D, one)
+		d1Inv := new(big.Int).ModInverse(d1, signer.Params().N)
+		signer.s.Mul(signer.s, d1Inv)
+		signer.s.Mod(signer.s, signer.Params().N)
+		if signer.s.Sign() != 0 {
+			return
+		}
+	}
+}
+
+// sign format = 30 + len(z) + 02 + len(r) + r + 02 + len(s) + s, z being what follows its size, ie 02+len(r)+r+02+len(s)+s
+func (signer *Signer) Sign() ([]byte, error) {
+
+	err := signer.MakeEntropy()
+	if err != nil {
+		return nil, err
+	}
+
+	signer.MakeAESKey()
+
+	err = signer.MakeCSPRNG()
+	if err != nil {
+		return nil, err
+	}
+
+	if !signer.IsParamsValid() {
+		return nil, errors.New("the order of the group is zero")
+	}
+
+	err = signer.MakeSignature()
+	if err != nil {
+		return nil, err
+	}
+
+	return asn1.Marshal(sm2Signature{signer.r, signer.s})
+}
+
+// PrivateKey
+
 func (priv *PrivateKey) Public() crypto.PublicKey {
 	return &priv.PublicKey
 }
 
-func SignDigitToSignData(r, s *big.Int) ([]byte, error) {
-	return asn1.Marshal(sm2Signature{r, s})
-}
-
-func SignDataToSignDigit(sign []byte) (*big.Int, *big.Int, error) {
-	var sm2Sign sm2Signature
-
-	_, err := asn1.Unmarshal(sign, &sm2Sign)
-	if err != nil {
-		return nil, nil, err
-	}
-	return sm2Sign.R, sm2Sign.S, nil
-}
-
-// sign format = 30 + len(z) + 02 + len(r) + r + 02 + len(s) + s, z being what follows its size, ie 02+len(r)+r+02+len(s)+s
 func (priv *PrivateKey) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts) ([]byte, error) {
-	r, s, err := Sign(priv, msg)
-	if err != nil {
-		return nil, err
+	signer := Signer{
+		PrivateKey: *priv,
+		Msg:        msg,
 	}
-	return asn1.Marshal(sm2Signature{r, s})
+	return signer.Sign()
 }
 
 func (priv *PrivateKey) Decrypt(data []byte) ([]byte, error) {
@@ -161,76 +271,6 @@ func GenerateKey() (*PrivateKey, error) {
 }
 
 var errZeroParam = errors.New("zero parameter")
-
-func Sign(priv *PrivateKey, hash []byte) (r, s *big.Int, err error) {
-	entropylen := (priv.Curve.Params().BitSize + 7) / 16
-	if entropylen > 32 {
-		entropylen = 32
-	}
-	entropy := make([]byte, entropylen)
-	_, err = io.ReadFull(rand.Reader, entropy)
-	if err != nil {
-		return
-	}
-
-	// Initialize an SHA-512 hash context; digest ...
-	md := sha512.New()
-	md.Write(priv.D.Bytes()) // the private key,
-	md.Write(entropy)        // the entropy,
-	md.Write(hash)           // and the input hash;
-	key := md.Sum(nil)[:32]  // and compute ChopMD-256(SHA-512),
-	// which is an indifferentiable MAC.
-
-	// Create an AES-CTR instance to use as a CSPRNG.
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create a CSPRNG that xors a stream of zeros with
-	// the output of the AES-CTR instance.
-	csprng := cipher.StreamReader{
-		R: zeroReader,
-		S: cipher.NewCTR(block, []byte(aesIV)),
-	}
-
-	// See [NSA] 3.4.1
-	c := priv.PublicKey.Curve
-	N := c.Params().N
-	if N.Sign() == 0 {
-		return nil, nil, errZeroParam
-	}
-	var k *big.Int
-	e := new(big.Int).SetBytes(hash)
-	for { // 调整算法细节以实现SM2
-		for {
-			k, err = randFieldElement(c, csprng)
-			if err != nil {
-				r = nil
-				return
-			}
-			r, _ = priv.Curve.ScalarBaseMult(k.Bytes())
-			r.Add(r, e)
-			r.Mod(r, N)
-			if r.Sign() != 0 {
-				break
-			}
-			if t := new(big.Int).Add(r, k); t.Cmp(N) == 0 {
-				break
-			}
-		}
-		rD := new(big.Int).Mul(priv.D, r)
-		s = new(big.Int).Sub(k, rD)
-		d1 := new(big.Int).Add(priv.D, one)
-		d1Inv := new(big.Int).ModInverse(d1, N)
-		s.Mul(s, d1Inv)
-		s.Mod(s, N)
-		if s.Sign() != 0 {
-			break
-		}
-	}
-	return
-}
 
 func Verify(pub *PublicKey, hash []byte, r, s *big.Int) bool {
 	c := pub.Curve
@@ -394,6 +434,16 @@ func zeroByteSlice() []byte {
  *  CipherText
  */
 func Encrypt(pub *PublicKey, data []byte) ([]byte, error) {
+	/*
+		PB为公钥，M为明文，len为M的长度
+		1. 产生随机数k，k的值大于等于1小于等于n-1
+		2. 计算点C1 = k*G（点C1坐标对应x1, y1)
+		3. 计算(x2, y2) = kPB
+		4. 计算C2 = hash(x2||M||y2)，这里的hash采用SM3
+		5. 计算ct = kdf(x2||y2, len)，若ct为全0则返回第一步
+		6. 计算C3 = M⊕ct
+		7. 密文C=C1||C2||C3
+	*/
 	length := len(data)
 	for {
 		c := []byte{}
@@ -467,6 +517,7 @@ func Decrypt(priv *PrivateKey, data []byte) ([]byte, error) {
 	tm = append(tm, c...)
 	tm = append(tm, y2Buf...)
 	h := sm3.Sm3Sum(tm)
+	// TODO: 检查bytes.Compare函数和bytes.Equal哪个更加高效
 	if bytes.Compare(h, data[64:96]) != 0 {
 		return c, errors.New("Decrypt: failed to decrypt")
 	}
@@ -524,4 +575,19 @@ func Decompress(a []byte) *PublicKey {
 		X:     x,
 		Y:     y,
 	}
+}
+
+func SignDigitToSignData(r, s *big.Int) ([]byte, error) {
+	return asn1.Marshal(sm2Signature{r, s})
+}
+
+func SignDataToSignDigit(sign []byte) (*big.Int, *big.Int, error) {
+	var sm2Sign sm2Signature
+
+	_, err := asn1.Unmarshal(sign, &sm2Sign)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return sm2Sign.R, sm2Sign.S, nil
 }

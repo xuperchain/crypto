@@ -46,6 +46,7 @@ func TestSm2(t *testing.T) {
 	d1, err := priv.Decrypt(d0)
 	if err != nil {
 		fmt.Printf("Error: failed to decrypt: %v\n", err)
+		t.FailNow()
 	}
 	fmt.Printf("clear text = %s\n", d1)
 	ok, err := WritePrivateKeytoPem("priv.pem", priv, nil) // 生成密钥文件
@@ -153,7 +154,7 @@ func TestSm2(t *testing.T) {
 		UnknownExtKeyUsage: testUnknownExtKeyUsage,
 
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 
 		OCSPServer:            []string{"http://ocsp.example.com"},
 		IssuingCertificateURL: []string{"http://crt.example.com/ca1.crt"},
@@ -197,6 +198,16 @@ func TestSm2(t *testing.T) {
 	}
 }
 
+func TestGenerateKey(t *testing.T) {
+	priv, err := GenerateKey()
+	if err != nil {
+		t.Error(err)
+	}
+	if priv.X == nil {
+		t.Error("priv.X is nil")
+	}
+}
+
 func BenchmarkSM2(t *testing.B) {
 	t.ReportAllocs()
 	for i := 0; i < t.N; i++ {
@@ -209,11 +220,11 @@ func BenchmarkSM2(t *testing.B) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		ok := priv.Verify(msg, sign) // 密钥验证
-		if ok != true {
-			fmt.Printf("Verify error\n")
-		} else {
-			fmt.Printf("Verify ok\n")
-		}
+		priv.Verify(msg, sign) // 密钥验证
+		// if ok != true {
+		// 	fmt.Printf("Verify error\n")
+		// } else {
+		// 	fmt.Printf("Verify ok\n")
+		// }
 	}
 }

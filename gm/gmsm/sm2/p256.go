@@ -19,9 +19,14 @@ import (
 	"crypto/elliptic"
 	"math/big"
 	"sync"
+	"unsafe"
 )
 
-/** 学习标准库p256的优化方法实现sm2的快速版本
+/**
+ * This is an optimized sm2-p256 implementation.
+ *
+ * NOTE from the previous authors
+ * 学习标准库p256的优化方法实现sm2的快速版本
  * 标准库的p256的代码实现有些晦涩难懂，当然sm2的同样如此，有兴趣的大家可以研究研究，最后神兽压阵。。。
  *
  * ━━━━━━animal━━━━━━
@@ -59,8 +64,11 @@ type sm2P256FieldElement [9]uint32
 type sm2P256LargeFieldElement [17]uint64
 
 const (
-	bottom28Bits = 0xFFFFFFF
-	bottom29Bits = 0x1FFFFFFF
+	bottom28BitsMask = 0xFFFFFFF
+	bottom29BitsMask = 0x1FFFFFFF
+	bottom32BitsMask = 0xFFFFFFFF
+	bottom57BitsMask = 0x1FFFFFFFFFFFFFF
+	twoPower57       = 0x200000000000000
 )
 
 func initP256Sm2() {
@@ -96,48 +104,13 @@ func (curve sm2P256Curve) IsOnCurve(X, Y *big.Int) bool {
 	sm2P256FromBig(&x, X)
 	sm2P256FromBig(&y, Y)
 
-	sm2P256Square(&x3, &x)       // x3 = x ^ 2
-	sm2P256Mul(&x3, &x3, &x)     // x3 = x ^ 2 * x
-	sm2P256Mul(&a, &curve.a, &x) // a = a * x
+	sm2P256Square2Way(&x3, &x, &y2, &y)
+
+	sm2P256Mul2Way(&x3, &x3, &x, &a, &curve.a, &x)
 	sm2P256Add(&x3, &x3, &a)
 	sm2P256Add(&x3, &x3, &curve.b)
 
-	sm2P256Square(&y2, &y) // y2 = y ^ 2
 	return sm2P256ToBig(&x3).Cmp(sm2P256ToBig(&y2)) == 0
-}
-
-func zForAffine(x, y *big.Int) *big.Int {
-	z := new(big.Int)
-	if x.Sign() != 0 || y.Sign() != 0 {
-		z.SetInt64(1)
-	}
-	return z
-}
-
-func (curve sm2P256Curve) Add(x1, y1, x2, y2 *big.Int) (*big.Int, *big.Int) {
-	var X1, Y1, Z1, X2, Y2, Z2, X3, Y3, Z3 sm2P256FieldElement
-
-	z1 := zForAffine(x1, y1)
-	z2 := zForAffine(x2, y2)
-	sm2P256FromBig(&X1, x1)
-	sm2P256FromBig(&Y1, y1)
-	sm2P256FromBig(&Z1, z1)
-	sm2P256FromBig(&X2, x2)
-	sm2P256FromBig(&Y2, y2)
-	sm2P256FromBig(&Z2, z2)
-	sm2P256PointAdd(&X1, &Y1, &Z1, &X2, &Y2, &Z2, &X3, &Y3, &Z3)
-	return sm2P256ToAffine(&X3, &Y3, &Z3)
-}
-
-func (curve sm2P256Curve) Double(x1, y1 *big.Int) (*big.Int, *big.Int) {
-	var X1, Y1, Z1 sm2P256FieldElement
-
-	z1 := zForAffine(x1, y1)
-	sm2P256FromBig(&X1, x1)
-	sm2P256FromBig(&Y1, y1)
-	sm2P256FromBig(&Z1, z1)
-	sm2P256PointDouble(&X1, &Y1, &Z1, &X1, &Y1, &Z1)
-	return sm2P256ToAffine(&X1, &Y1, &Z1)
 }
 
 func (curve sm2P256Curve) ScalarMult(x1, y1 *big.Int, k []byte) (*big.Int, *big.Int) {
@@ -160,7 +133,9 @@ func (curve sm2P256Curve) ScalarBaseMult(k []byte) (*big.Int, *big.Int) {
 	return sm2P256ToAffine(&X, &Y, &Z)
 }
 
-var sm2P256Precomputed = [9 * 2 * 15 * 2]uint32{
+var sm2P256Precomputed = [9 * 2 * 16 * 2]uint32{
+	0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0x830053d, 0x328990f, 0x6c04fe1, 0xc0f72e5, 0x1e19f3c, 0x666b093, 0x175a87b, 0xec38276, 0x222cf4b,
 	0x185a1bba, 0x354e593, 0x1295fac1, 0xf2bc469, 0x47c60fa, 0xc19b8a9, 0xf63533e, 0x903ae6b, 0xc79acba,
 	0x15b061a4, 0x33e020b, 0xdffb34b, 0xfcf2c8, 0x16582e08, 0x262f203, 0xfb34381, 0xa55452, 0x604f0ff,
@@ -223,6 +198,7 @@ var sm2P256Precomputed = [9 * 2 * 15 * 2]uint32{
 	0x11902a0, 0x6c29cc9, 0x1d5ffbe6, 0xdb0b4c7, 0x10144c14, 0x2f2b719, 0x301189, 0x2343336, 0xa0bf2ac,
 }
 
+// 大尾端转换小尾端
 func sm2P256GetScalar(b *[32]byte, a []byte) {
 	var scalarBytes []byte
 
@@ -238,33 +214,31 @@ func sm2P256GetScalar(b *[32]byte, a []byte) {
 	}
 }
 
+/**
+ * (xOut, yOut, zOut) = (x1, y1, z1) + (x2, y2)
+ *
+ * let tx2 = x2 * z1 ^ 2, ty2 = y2 * z1 ^ 3
+ * Then:
+ *
+ * 	xOut = (tx2 - x1)^3 - 2 * x1 * (tx2 - x1)^2
+ *		yOut = (ty2 - t1)(x1 * (tx2 - x1)^2 - xOut) - y1 * (tx2 - x1)^3
+ *		zOut = (tx2 - x1) * z1
+**/
 func sm2P256PointAddMixed(xOut, yOut, zOut, x1, y1, z1, x2, y2 *sm2P256FieldElement) {
-	var z1z1, z1z1z1, s2, u2, h, i, j, r, rr, v, tmp sm2P256FieldElement
+	var z1z1, z1z1z1, ty2, tx2, dx, dx2, dx3, dy, dy2, v, tmp sm2P256FieldElement
 
 	sm2P256Square(&z1z1, z1)
-	sm2P256Add(&tmp, z1, z1)
-
-	sm2P256Mul(&u2, x2, &z1z1)
-	sm2P256Mul(&z1z1z1, z1, &z1z1)
-	sm2P256Mul(&s2, y2, &z1z1z1)
-	sm2P256Sub(&h, &u2, x1)
-	sm2P256Add(&i, &h, &h)
-	sm2P256Square(&i, &i)
-	sm2P256Mul(&j, &h, &i)
-	sm2P256Sub(&r, &s2, y1)
-	sm2P256Add(&r, &r, &r)
-	sm2P256Mul(&v, x1, &i)
-
-	sm2P256Mul(zOut, &tmp, &h)
-	sm2P256Square(&rr, &r)
-	sm2P256Sub(xOut, &rr, &j)
+	sm2P256Mul2Way(&tx2, x2, &z1z1, &z1z1z1, z1, &z1z1)
+	sm2P256Sub(&dx, &tx2, x1)
+	sm2P256Mul2Way(zOut, z1, &dx, &ty2, y2, &z1z1z1)
+	sm2P256Sub(&dy, &ty2, y1)
+	sm2P256Square2Way(&dx2, &dx, &dy2, &dy)
+	sm2P256Mul2Way(&dx3, &dx, &dx2, &v, x1, &dx2)
+	sm2P256Sub(xOut, &dy2, &dx3)
 	sm2P256Sub(xOut, xOut, &v)
 	sm2P256Sub(xOut, xOut, &v)
-
 	sm2P256Sub(&tmp, &v, xOut)
-	sm2P256Mul(yOut, &tmp, &r)
-	sm2P256Mul(&tmp, y1, &j)
-	sm2P256Sub(yOut, yOut, &tmp)
+	sm2P256Mul2Way(yOut, &tmp, &dy, &tmp, y1, &dx3)
 	sm2P256Sub(yOut, yOut, &tmp)
 }
 
@@ -279,63 +253,25 @@ func sm2P256CopyConditional(out, in *sm2P256FieldElement, mask uint32) {
 }
 
 // sm2P256SelectAffinePoint sets {out_x,out_y} to the index'th entry of table.
+//
 // On entry: index < 16, table[0] must be zero.
 func sm2P256SelectAffinePoint(xOut, yOut *sm2P256FieldElement, table []uint32, index uint32) {
-	for i := range xOut {
-		xOut[i] = 0
-	}
-	for i := range yOut {
-		yOut[i] = 0
-	}
-
-	for i := uint32(1); i < 16; i++ {
-		mask := i ^ index
-		mask |= mask >> 2
-		mask |= mask >> 1
-		mask &= 1
-		mask--
-		for j := range xOut {
-			xOut[j] |= table[0] & mask
-			table = table[1:]
-		}
-		for j := range yOut {
-			yOut[j] |= table[0] & mask
-			table = table[1:]
-		}
+	xbase := index * 18
+	ybase := xbase + 9
+	for j := range xOut {
+		xOut[j] = table[xbase+uint32(j)]
+		yOut[j] = table[ybase+uint32(j)]
 	}
 }
 
-// sm2P256SelectJacobianPoint sets {out_x,out_y,out_z} to the index'th entry of
-// table.
+// sm2P256SelectJacobianPoint sets {out_x,out_y,out_z} to the index'th entry of table.
+//
 // On entry: index < 16, table[0] must be zero.
 func sm2P256SelectJacobianPoint(xOut, yOut, zOut *sm2P256FieldElement, table *[16][3]sm2P256FieldElement, index uint32) {
-	for i := range xOut {
-		xOut[i] = 0
-	}
-	for i := range yOut {
-		yOut[i] = 0
-	}
-	for i := range zOut {
-		zOut[i] = 0
-	}
-
-	// The implicit value at index 0 is all zero. We don't need to perform that
-	// iteration of the loop because we already set out_* to zero.
-	for i := uint32(1); i < 16; i++ {
-		mask := i ^ index
-		mask |= mask >> 2
-		mask |= mask >> 1
-		mask &= 1
-		mask--
-		for j := range xOut {
-			xOut[j] |= table[i][0][j] & mask
-		}
-		for j := range yOut {
-			yOut[j] |= table[i][1][j] & mask
-		}
-		for j := range zOut {
-			zOut[j] |= table[i][2][j] & mask
-		}
+	for j := range xOut {
+		xOut[j] = table[index][0][j]
+		yOut[j] = table[index][1][j]
+		zOut[j] = table[index][2][j]
 	}
 }
 
@@ -393,7 +329,7 @@ func sm2P256ScalarBaseMult(xOut, yOut, zOut *sm2P256FieldElement, scalar *[32]ui
 			// Equally, the result is also wrong if the point from the table is
 			// zero, which happens when the index is zero. We handle that by
 			// only copying from {tx,ty,tz} to {xOut,yOut,zOut} if index != 0.
-			pIsNoninfiniteMask = nonZeroToAllOnes(index)
+			pIsNoninfiniteMask = poisitiveToAllOnes(index)
 			mask = pIsNoninfiniteMask & ^nIsInfinityMask
 			sm2P256CopyConditional(xOut, &tx, mask)
 			sm2P256CopyConditional(yOut, &ty, mask)
@@ -404,10 +340,12 @@ func sm2P256ScalarBaseMult(xOut, yOut, zOut *sm2P256FieldElement, scalar *[32]ui
 	}
 }
 
+// sm2P256ScalarBaseMult sets {xOut,yOut,zOut} = scalar*(x,y) where scalar is a
+// little-endian number.
 func sm2P256ScalarMult(xOut, yOut, zOut, x, y *sm2P256FieldElement, scalar *[32]uint8) {
 	var precomp [16][3]sm2P256FieldElement
 	var px, py, pz, tx, ty, tz sm2P256FieldElement
-	var nIsInfinityMask, index, pIsNoninfiniteMask, mask uint32
+	var tIsInfinityMask, index, pIsNoninfiniteMask, mask uint32
 
 	// We precompute 0,1,2,... times {x,y}.
 	precomp[1][0] = *x
@@ -415,22 +353,16 @@ func sm2P256ScalarMult(xOut, yOut, zOut, x, y *sm2P256FieldElement, scalar *[32]
 	precomp[1][2] = sm2P256Factor[1]
 
 	for i := 2; i < 16; i += 2 {
-		sm2P256PointDouble(&precomp[i][0], &precomp[i][1], &precomp[i][2], &precomp[i/2][0], &precomp[i/2][1], &precomp[i/2][2])
-		sm2P256PointAddMixed(&precomp[i+1][0], &precomp[i+1][1], &precomp[i+1][2], &precomp[i][0], &precomp[i][1], &precomp[i][2], x, y)
+		half_i := i / 2
+		i_plus_1 := i + 1
+		sm2P256PointDouble(&precomp[i][0], &precomp[i][1], &precomp[i][2], &precomp[half_i][0], &precomp[half_i][1], &precomp[half_i][2])
+		sm2P256PointAddMixed(&precomp[i_plus_1][0], &precomp[i_plus_1][1], &precomp[i_plus_1][2], &precomp[i][0], &precomp[i][1], &precomp[i][2], x, y)
 	}
 
-	for i := range xOut {
-		xOut[i] = 0
-	}
-	for i := range yOut {
-		yOut[i] = 0
-	}
-	for i := range zOut {
-		zOut[i] = 0
-	}
-	nIsInfinityMask = ^uint32(0)
+	// tIsInfinityMask = ^uint32(0)
 
 	// We add in a window of four bits each iteration and do this 64 times.
+
 	for i := 0; i < 64; i++ {
 		if i != 0 {
 			sm2P256PointDouble(xOut, yOut, zOut, xOut, yOut, zOut)
@@ -449,19 +381,23 @@ func sm2P256ScalarMult(xOut, yOut, zOut, x, y *sm2P256FieldElement, scalar *[32]
 		// See the comments in scalarBaseMult about handling infinities.
 		sm2P256SelectJacobianPoint(&px, &py, &pz, &precomp, index)
 		sm2P256PointAdd(xOut, yOut, zOut, &px, &py, &pz, &tx, &ty, &tz)
-		sm2P256CopyConditional(xOut, &px, nIsInfinityMask)
-		sm2P256CopyConditional(yOut, &py, nIsInfinityMask)
-		sm2P256CopyConditional(zOut, &pz, nIsInfinityMask)
+		sm2P256CopyConditional(xOut, &px, tIsInfinityMask)
+		sm2P256CopyConditional(yOut, &py, tIsInfinityMask)
+		sm2P256CopyConditional(zOut, &pz, tIsInfinityMask)
 
-		pIsNoninfiniteMask = nonZeroToAllOnes(index)
-		mask = pIsNoninfiniteMask & ^nIsInfinityMask
+		pIsNoninfiniteMask = poisitiveToAllOnes(index)
+		mask = pIsNoninfiniteMask & ^tIsInfinityMask
 		sm2P256CopyConditional(xOut, &tx, mask)
 		sm2P256CopyConditional(yOut, &ty, mask)
 		sm2P256CopyConditional(zOut, &tz, mask)
-		nIsInfinityMask &^= pIsNoninfiniteMask
+		tIsInfinityMask &^= pIsNoninfiniteMask
 	}
 }
 
+/**
+ * xOut = x / z^2
+ * yOut = y / z^3
+**/
 func sm2P256PointToAffine(xOut, yOut, x, y, z *sm2P256FieldElement) {
 	var zInv, zInvSq sm2P256FieldElement
 
@@ -470,8 +406,7 @@ func sm2P256PointToAffine(xOut, yOut, x, y, z *sm2P256FieldElement) {
 	sm2P256FromBig(&zInv, zz)
 
 	sm2P256Square(&zInvSq, &zInv)
-	sm2P256Mul(xOut, x, &zInvSq)
-	sm2P256Mul(&zInv, &zInv, &zInvSq)
+	sm2P256Mul2Way(xOut, x, &zInvSq, &zInv, &zInv, &zInvSq)
 	sm2P256Mul(yOut, y, &zInv)
 }
 
@@ -483,138 +418,175 @@ func sm2P256ToAffine(x, y, z *sm2P256FieldElement) (xOut, yOut *big.Int) {
 }
 
 var sm2P256Factor = []sm2P256FieldElement{
-	sm2P256FieldElement{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
-	sm2P256FieldElement{0x2, 0x0, 0x1FFFFF00, 0x7FF, 0x0, 0x0, 0x0, 0x2000000, 0x0},
-	sm2P256FieldElement{0x4, 0x0, 0x1FFFFE00, 0xFFF, 0x0, 0x0, 0x0, 0x4000000, 0x0},
-	sm2P256FieldElement{0x6, 0x0, 0x1FFFFD00, 0x17FF, 0x0, 0x0, 0x0, 0x6000000, 0x0},
-	sm2P256FieldElement{0x8, 0x0, 0x1FFFFC00, 0x1FFF, 0x0, 0x0, 0x0, 0x8000000, 0x0},
-	sm2P256FieldElement{0xA, 0x0, 0x1FFFFB00, 0x27FF, 0x0, 0x0, 0x0, 0xA000000, 0x0},
-	sm2P256FieldElement{0xC, 0x0, 0x1FFFFA00, 0x2FFF, 0x0, 0x0, 0x0, 0xC000000, 0x0},
-	sm2P256FieldElement{0xE, 0x0, 0x1FFFF900, 0x37FF, 0x0, 0x0, 0x0, 0xE000000, 0x0},
-	sm2P256FieldElement{0x10, 0x0, 0x1FFFF800, 0x3FFF, 0x0, 0x0, 0x0, 0x0, 0x01},
-}
-
-func sm2P256Scalar(b *sm2P256FieldElement, a int) {
-	sm2P256Mul(b, b, &sm2P256Factor[a])
+	{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+	{0x2, 0x0, 0x1FFFFF00, 0x7FF, 0x0, 0x0, 0x0, 0x2000000, 0x0},
+	{0x4, 0x0, 0x1FFFFE00, 0xFFF, 0x0, 0x0, 0x0, 0x4000000, 0x0},
+	{0x6, 0x0, 0x1FFFFD00, 0x17FF, 0x0, 0x0, 0x0, 0x6000000, 0x0},
+	{0x8, 0x0, 0x1FFFFC00, 0x1FFF, 0x0, 0x0, 0x0, 0x8000000, 0x0},
+	{0xA, 0x0, 0x1FFFFB00, 0x27FF, 0x0, 0x0, 0x0, 0xA000000, 0x0},
+	{0xC, 0x0, 0x1FFFFA00, 0x2FFF, 0x0, 0x0, 0x0, 0xC000000, 0x0},
+	{0xE, 0x0, 0x1FFFF900, 0x37FF, 0x0, 0x0, 0x0, 0xE000000, 0x0},
+	{0x10, 0x0, 0x1FFFF800, 0x3FFF, 0x0, 0x0, 0x0, 0x0, 0x01},
 }
 
 // (x3, y3, z3) = (x1, y1, z1) + (x2, y2, z2)
 func sm2P256PointAdd(x1, y1, z1, x2, y2, z2, x3, y3, z3 *sm2P256FieldElement) {
-	var u1, u2, z22, z12, z23, z13, s1, s2, h, h2, r, r2, tm sm2P256FieldElement
 
-	if sm2P256ToBig(z1).Sign() == 0 {
+	var pv = []uint32{0x1ffffffe, 0xfffffff, 0x200000ff, 0xffff7ff, 0x1fffffff, 0xfffffff, 0x1fffffff, 0xdffffff, 0x1fffffff}
+	var tx1, tx2, z22, z12, z23, z13, ty1, ty2, dx, dx2, dx3, dy, dy2, tm sm2P256FieldElement
+
+	is_z1_zero := true
+	for i := range z1 {
+		if z1[i] != 0 {
+			is_z1_zero = false
+			break
+		}
+	}
+
+	is_z1_p := true
+	for i := range z1 {
+		if z1[i] != pv[i] {
+			is_z1_p = false
+			break
+		}
+	}
+
+	if is_z1_zero || is_z1_p {
 		sm2P256Dup(x3, x2)
 		sm2P256Dup(y3, y2)
 		sm2P256Dup(z3, z2)
 		return
 	}
 
-	if sm2P256ToBig(z2).Sign() == 0 {
+	is_z2_zero := true
+	for i := range z2 {
+		if z2[i] != 0 {
+			is_z2_zero = false
+			break
+		}
+	}
+
+	is_z2_p := true
+	for i := range z2 {
+		if z2[i] != pv[i] {
+			is_z2_p = false
+			break
+		}
+	}
+
+	if is_z2_zero || is_z2_p {
 		sm2P256Dup(x3, x1)
 		sm2P256Dup(y3, y1)
 		sm2P256Dup(z3, z1)
 		return
 	}
 
-	sm2P256Square(&z12, z1) // z12 = z1 ^ 2
-	sm2P256Square(&z22, z2) // z22 = z2 ^ 2
+	sm2P256Square2Way(&z12, z1, &z22, z2)
+	sm2P256Mul2Way(&z13, &z12, z1, &z23, &z22, z2)
+	sm2P256Mul2Way(&tx1, x1, &z22, &tx2, x2, &z12)
+	sm2P256Mul2Way(&ty1, y1, &z23, &ty2, y2, &z13)
 
-	sm2P256Mul(&z13, &z12, z1) // z13 = z1 ^ 3
-	sm2P256Mul(&z23, &z22, z2) // z23 = z2 ^ 3
+	// NOTE: remove this block does not affect the logic for now, but if it can be ignored
+	// remains uncertain
+	// if sm2P256ToBig(&tx1).Cmp(sm2P256ToBig(&tx2)) == 0 &&
+	// 	sm2P256ToBig(&ty1).Cmp(sm2P256ToBig(&ty2)) == 0 {
+	// 	fmt.Println("tx1 == tx2")
+	// 	sm2P256PointDouble(x1, y1, z1, x1, y1, z1)
+	// }
 
-	sm2P256Mul(&u1, x1, &z22) // u1 = x1 * z2 ^ 2
-	sm2P256Mul(&u2, x2, &z12) // u2 = x2 * z1 ^ 2
+	// parallel 2
+	sm2P256Sub(&dx, &tx2, &tx1) // dx = tx2 - tx1
+	sm2P256Sub(&dy, &ty2, &ty1) // dy = ty2 - ty1
 
-	sm2P256Mul(&s1, y1, &z23) // s1 = y1 * z2 ^ 3
-	sm2P256Mul(&s2, y2, &z13) // s2 = y2 * z1 ^ 3
+	sm2P256Square2Way(&dy2, &dy, &dx2, &dx)
+	sm2P256Mul2Way(&dx3, &dx2, &dx, &tm, &tx1, &dx2)
 
-	if sm2P256ToBig(&u1).Cmp(sm2P256ToBig(&u2)) == 0 &&
-		sm2P256ToBig(&s1).Cmp(sm2P256ToBig(&s2)) == 0 {
-		sm2P256PointDouble(x1, y1, z1, x1, y1, z1)
-	}
+	sm2P256Sub(x3, &dy2, &dx3)
+	sm2P256Sub(x3, x3, &tm)  // x3 = dy ^ 2 - dx ^ 3 - tx1 * dx ^ 2
+	sm2P256Sub(x3, x3, &tm)  // x3 = dy ^ 2 - dx ^ 3 - tx1 * dx ^ 2
+	sm2P256Sub(&tm, &tm, x3) // tm = tx1 * dx ^ 2 - x3
 
-	sm2P256Sub(&h, &u2, &u1) // h = u2 - u1
-	sm2P256Sub(&r, &s2, &s1) // r = s2 - s1
+	sm2P256Mul2Way(y3, &dy, &tm, z3, z1, z2)
+	sm2P256Mul2Way(&tm, &dx3, &ty1, z3, z3, &dx)
 
-	sm2P256Square(&r2, &r) // r2 = r ^ 2
-	sm2P256Square(&h2, &h) // h2 = h ^ 2
-
-	sm2P256Mul(&tm, &h2, &h) // tm = h ^ 3
-	sm2P256Sub(x3, &r2, &tm)
-	sm2P256Mul(&tm, &u1, &h2)
-	sm2P256Scalar(&tm, 2)   // tm = 2 * (u1 * h ^ 2)
-	sm2P256Sub(x3, x3, &tm) // x3 = r ^ 2 - h ^ 3 - 2 * u1 * h ^ 2
-
-	sm2P256Mul(&tm, &u1, &h2) // tm = u1 * h ^ 2
-	sm2P256Sub(&tm, &tm, x3)  // tm = u1 * h ^ 2 - x3
-	sm2P256Mul(y3, &r, &tm)
-	sm2P256Mul(&tm, &h2, &h)  // tm = h ^ 3
-	sm2P256Mul(&tm, &tm, &s1) // tm = s1 * h ^ 3
-	sm2P256Sub(y3, y3, &tm)   // y3 = r * (u1 * h ^ 2 - x3) - s1 * h ^ 3
-
-	sm2P256Mul(z3, z1, z2)
-	sm2P256Mul(z3, z3, &h) // z3 = z1 * z3 * h
+	sm2P256Sub(y3, y3, &tm) // y3 = dy * (tx1 * dx ^ 2 - x3) - ty1 * dx ^ 3
 }
 
 func sm2P256PointDouble(x3, y3, z3, x, y, z *sm2P256FieldElement) {
-	var s, m, m2, x2, y2, z2, z4, y4, az4 sm2P256FieldElement
+	var x2, lambda, lambda2, z4_mul_a, y2, y4_mul_8, t, s sm2P256FieldElement
 
-	sm2P256Square(&x2, x) // x2 = x ^ 2
-	sm2P256Square(&y2, y) // y2 = y ^ 2
-	sm2P256Square(&z2, z) // z2 = z ^ 2
+	sm2P256Square2Way(&x2, x, &z4_mul_a, z)
+	sm2P256Square2Way(&y2, y, &z4_mul_a, &z4_mul_a)
+	sm2P256Mul2Way(&z4_mul_a, &z4_mul_a, &sm2P256.a, &s, x, &y2) // s = x * y2
 
-	sm2P256Square(&z4, z)   // z4 = z ^ 2
-	sm2P256Mul(&z4, &z4, z) // z4 = z ^ 3
-	sm2P256Mul(&z4, &z4, z) // z4 = z ^ 4
+	sm2P256Add(&lambda, &x2, &x2)
+	sm2P256Add(&lambda, &lambda, &x2)
+	sm2P256Add(&lambda, &lambda, &z4_mul_a) // lambda = (3 * x2 + a * z4)
 
-	sm2P256Square(&y4, y)   // y4 = y ^ 2
-	sm2P256Mul(&y4, &y4, y) // y4 = y ^ 3
-	sm2P256Mul(&y4, &y4, y) // y4 = y ^ 4
-	sm2P256Scalar(&y4, 8)   // y4 = 8 * y ^ 4
+	sm2P256Add(&y4_mul_8, &y2, &y2)
+	sm2P256Square2Way(&lambda2, &lambda, &y4_mul_8, &y4_mul_8)
+	sm2P256Add(&y4_mul_8, &y4_mul_8, &y4_mul_8)
+	sm2P256Add(&s, &s, &s)
+	sm2P256Add(&s, &s, &s)       // s = 4x * y2
+	sm2P256Sub(x3, &lambda2, &s) // x3 = 9 * x4 - 4 * x * y2
+	sm2P256Sub(x3, x3, &s)       // x3 = 9 * x4 - 8 * x * y2
 
-	sm2P256Mul(&s, x, &y2)
-	sm2P256Scalar(&s, 4) // s = 4 * x * y ^ 2
+	sm2P256Sub(&t, &s, x3)                    // t = 4 * x * y2 - x3
+	sm2P256Mul2Way(&t, &t, &lambda, z3, y, z) // t = (4 * x * y2 - x3) * 3 * x2
 
-	sm2P256Dup(&m, &x2)
-	sm2P256Scalar(&m, 3)
-	sm2P256Mul(&az4, &sm2P256.a, &z4)
-	sm2P256Add(&m, &m, &az4) // m = 3 * x ^ 2 + a * z ^ 4
-
-	sm2P256Square(&m2, &m) // m2 = m ^ 2
-
-	sm2P256Add(z3, y, z)
-	sm2P256Square(z3, z3)
-	sm2P256Sub(z3, z3, &z2)
-	sm2P256Sub(z3, z3, &y2) // z' = (y + z) ^2 - z ^ 2 - y ^ 2
-
-	sm2P256Sub(x3, &m2, &s)
-	sm2P256Sub(x3, x3, &s) // x' = m2 - 2 * s
-
-	sm2P256Sub(y3, &s, x3)
-	sm2P256Mul(y3, y3, &m)
-	sm2P256Sub(y3, y3, &y4) // y' = m * (s - x') - 8 * y ^ 4
+	sm2P256Sub(y3, &t, &y4_mul_8) // 8 * y4 - 3 * x2 * (s - x3)
+	sm2P256Add(z3, z3, z3)
 }
 
 // p256Zero31 is 0 mod p.
 var sm2P256Zero31 = sm2P256FieldElement{0x7FFFFFF8, 0x3FFFFFFC, 0x800003FC, 0x3FFFDFFC, 0x7FFFFFFC, 0x3FFFFFFC, 0x7FFFFFFC, 0x37FFFFFC, 0x7FFFFFFC}
 
-// c = a + b
 func sm2P256Add(c, a, b *sm2P256FieldElement) {
 	carry := uint32(0)
-	for i := 0; ; i++ {
-		c[i] = a[i] + b[i]
-		c[i] += carry
-		carry = c[i] >> 29
-		c[i] &= bottom29Bits
-		i++
-		if i == 9 {
-			break
-		}
-		c[i] = a[i] + b[i]
-		c[i] += carry
-		carry = c[i] >> 28
-		c[i] &= bottom28Bits
-	}
+	c[0] = a[0] + b[0]
+	c[0] += carry
+	carry = c[0] >> 29
+	c[0] &= bottom29BitsMask
+
+	c[1] = a[1] + b[1]
+	c[1] += carry
+	carry = c[1] >> 28
+	c[1] &= bottom28BitsMask
+
+	c[2] = a[2] + b[2]
+	c[2] += carry
+	carry = c[2] >> 29
+	c[2] &= bottom29BitsMask
+
+	c[3] = a[3] + b[3]
+	c[3] += carry
+	carry = c[3] >> 28
+	c[3] &= bottom28BitsMask
+
+	c[4] = a[4] + b[4]
+	c[4] += carry
+	carry = c[4] >> 29
+	c[4] &= bottom29BitsMask
+
+	c[5] = a[5] + b[5]
+	c[5] += carry
+	carry = c[5] >> 28
+	c[5] &= bottom28BitsMask
+
+	c[6] = a[6] + b[6]
+	c[6] += carry
+	carry = c[6] >> 29
+	c[6] &= bottom29BitsMask
+
+	c[7] = a[7] + b[7]
+	c[7] += carry
+	carry = c[7] >> 28
+	c[7] &= bottom28BitsMask
+
+	c[8] = a[8] + b[8]
+	c[8] += carry
+	carry = c[8] >> 29
+	c[8] &= bottom29BitsMask
 	sm2P256ReduceCarry(c, carry)
 }
 
@@ -622,173 +594,328 @@ func sm2P256Add(c, a, b *sm2P256FieldElement) {
 func sm2P256Sub(c, a, b *sm2P256FieldElement) {
 	var carry uint32
 
-	for i := 0; ; i++ {
-		c[i] = a[i] - b[i]
-		c[i] += sm2P256Zero31[i]
-		c[i] += carry
-		carry = c[i] >> 29
-		c[i] &= bottom29Bits
-		i++
-		if i == 9 {
-			break
-		}
-		c[i] = a[i] - b[i]
-		c[i] += sm2P256Zero31[i]
-		c[i] += carry
-		carry = c[i] >> 28
-		c[i] &= bottom28Bits
-	}
+	c[0] = a[0] - b[0]
+	c[0] += sm2P256Zero31[0]
+	c[0] += carry
+	carry = c[0] >> 29
+	c[0] &= bottom29BitsMask
+
+	c[1] = a[1] - b[1]
+	c[1] += sm2P256Zero31[1]
+	c[1] += carry
+	carry = c[1] >> 28
+	c[1] &= bottom28BitsMask
+
+	c[2] = a[2] - b[2]
+	c[2] += sm2P256Zero31[2]
+	c[2] += carry
+	carry = c[2] >> 29
+	c[2] &= bottom29BitsMask
+
+	c[3] = a[3] - b[3]
+	c[3] += sm2P256Zero31[3]
+	c[3] += carry
+	carry = c[3] >> 28
+	c[3] &= bottom28BitsMask
+
+	c[4] = a[4] - b[4]
+	c[4] += sm2P256Zero31[4]
+	c[4] += carry
+	carry = c[4] >> 29
+	c[4] &= bottom29BitsMask
+
+	c[5] = a[5] - b[5]
+	c[5] += sm2P256Zero31[5]
+	c[5] += carry
+	carry = c[5] >> 28
+	c[5] &= bottom28BitsMask
+
+	c[6] = a[6] - b[6]
+	c[6] += sm2P256Zero31[6]
+	c[6] += carry
+	carry = c[6] >> 29
+	c[6] &= bottom29BitsMask
+
+	c[7] = a[7] - b[7]
+	c[7] += sm2P256Zero31[7]
+	c[7] += carry
+	carry = c[7] >> 28
+	c[7] &= bottom28BitsMask
+
+	c[8] = a[8] - b[8]
+	c[8] += sm2P256Zero31[8]
+	c[8] += carry
+	carry = c[8] >> 29
+	c[8] &= bottom29BitsMask
+
 	sm2P256ReduceCarry(c, carry)
 }
 
-// c = a * b
 func sm2P256Mul(c, a, b *sm2P256FieldElement) {
 	var tmp sm2P256LargeFieldElement
 
 	tmp[0] = uint64(a[0]) * uint64(b[0])
-	tmp[1] = uint64(a[0])*(uint64(b[1])<<0) +
-		uint64(a[1])*(uint64(b[0])<<0)
-	tmp[2] = uint64(a[0])*(uint64(b[2])<<0) +
-		uint64(a[1])*(uint64(b[1])<<1) +
-		uint64(a[2])*(uint64(b[0])<<0)
-	tmp[3] = uint64(a[0])*(uint64(b[3])<<0) +
-		uint64(a[1])*(uint64(b[2])<<0) +
-		uint64(a[2])*(uint64(b[1])<<0) +
-		uint64(a[3])*(uint64(b[0])<<0)
-	tmp[4] = uint64(a[0])*(uint64(b[4])<<0) +
-		uint64(a[1])*(uint64(b[3])<<1) +
-		uint64(a[2])*(uint64(b[2])<<0) +
-		uint64(a[3])*(uint64(b[1])<<1) +
-		uint64(a[4])*(uint64(b[0])<<0)
-	tmp[5] = uint64(a[0])*(uint64(b[5])<<0) +
-		uint64(a[1])*(uint64(b[4])<<0) +
-		uint64(a[2])*(uint64(b[3])<<0) +
-		uint64(a[3])*(uint64(b[2])<<0) +
-		uint64(a[4])*(uint64(b[1])<<0) +
-		uint64(a[5])*(uint64(b[0])<<0)
-	tmp[6] = uint64(a[0])*(uint64(b[6])<<0) +
-		uint64(a[1])*(uint64(b[5])<<1) +
-		uint64(a[2])*(uint64(b[4])<<0) +
-		uint64(a[3])*(uint64(b[3])<<1) +
-		uint64(a[4])*(uint64(b[2])<<0) +
-		uint64(a[5])*(uint64(b[1])<<1) +
-		uint64(a[6])*(uint64(b[0])<<0)
-	tmp[7] = uint64(a[0])*(uint64(b[7])<<0) +
-		uint64(a[1])*(uint64(b[6])<<0) +
-		uint64(a[2])*(uint64(b[5])<<0) +
-		uint64(a[3])*(uint64(b[4])<<0) +
-		uint64(a[4])*(uint64(b[3])<<0) +
-		uint64(a[5])*(uint64(b[2])<<0) +
-		uint64(a[6])*(uint64(b[1])<<0) +
-		uint64(a[7])*(uint64(b[0])<<0)
-	// tmp[8] has the greatest value but doesn't overflow. See logic in
-	// p256Square.
-	tmp[8] = uint64(a[0])*(uint64(b[8])<<0) +
-		uint64(a[1])*(uint64(b[7])<<1) +
-		uint64(a[2])*(uint64(b[6])<<0) +
-		uint64(a[3])*(uint64(b[5])<<1) +
-		uint64(a[4])*(uint64(b[4])<<0) +
-		uint64(a[5])*(uint64(b[3])<<1) +
-		uint64(a[6])*(uint64(b[2])<<0) +
-		uint64(a[7])*(uint64(b[1])<<1) +
-		uint64(a[8])*(uint64(b[0])<<0)
-	tmp[9] = uint64(a[1])*(uint64(b[8])<<0) +
-		uint64(a[2])*(uint64(b[7])<<0) +
-		uint64(a[3])*(uint64(b[6])<<0) +
-		uint64(a[4])*(uint64(b[5])<<0) +
-		uint64(a[5])*(uint64(b[4])<<0) +
-		uint64(a[6])*(uint64(b[3])<<0) +
-		uint64(a[7])*(uint64(b[2])<<0) +
-		uint64(a[8])*(uint64(b[1])<<0)
-	tmp[10] = uint64(a[2])*(uint64(b[8])<<0) +
-		uint64(a[3])*(uint64(b[7])<<1) +
-		uint64(a[4])*(uint64(b[6])<<0) +
-		uint64(a[5])*(uint64(b[5])<<1) +
-		uint64(a[6])*(uint64(b[4])<<0) +
-		uint64(a[7])*(uint64(b[3])<<1) +
-		uint64(a[8])*(uint64(b[2])<<0)
-	tmp[11] = uint64(a[3])*(uint64(b[8])<<0) +
-		uint64(a[4])*(uint64(b[7])<<0) +
-		uint64(a[5])*(uint64(b[6])<<0) +
-		uint64(a[6])*(uint64(b[5])<<0) +
-		uint64(a[7])*(uint64(b[4])<<0) +
-		uint64(a[8])*(uint64(b[3])<<0)
-	tmp[12] = uint64(a[4])*(uint64(b[8])<<0) +
-		uint64(a[5])*(uint64(b[7])<<1) +
-		uint64(a[6])*(uint64(b[6])<<0) +
-		uint64(a[7])*(uint64(b[5])<<1) +
-		uint64(a[8])*(uint64(b[4])<<0)
-	tmp[13] = uint64(a[5])*(uint64(b[8])<<0) +
-		uint64(a[6])*(uint64(b[7])<<0) +
-		uint64(a[7])*(uint64(b[6])<<0) +
-		uint64(a[8])*(uint64(b[5])<<0)
-	tmp[14] = uint64(a[6])*(uint64(b[8])<<0) +
-		uint64(a[7])*(uint64(b[7])<<1) +
-		uint64(a[8])*(uint64(b[6])<<0)
-	tmp[15] = uint64(a[7])*(uint64(b[8])<<0) +
-		uint64(a[8])*(uint64(b[7])<<0)
-	tmp[16] = uint64(a[8]) * (uint64(b[8]) << 0)
+
+	tmp[1] = uint64(a[0]) * uint64(b[1])
+	tmp[1] += uint64(a[1]) * uint64(b[0])
+
+	tmp[2] = uint64(a[0]) * uint64(b[2])
+	tmp[2] += uint64(a[1]) * (uint64(b[1]) << 1)
+	tmp[2] += uint64(a[2]) * uint64(b[0])
+
+	tmp[3] = uint64(a[0]) * uint64(b[3])
+	tmp[3] += uint64(a[1]) * uint64(b[2])
+	tmp[3] += uint64(a[2]) * uint64(b[1])
+	tmp[3] += uint64(a[3]) * uint64(b[0])
+
+	tmp[4] = uint64(a[1]) * uint64(b[3])
+	tmp[4] += uint64(a[3]) * uint64(b[1])
+	tmp[4] <<= 1
+	tmp[4] += uint64(a[0]) * uint64(b[4])
+	tmp[4] += uint64(a[2]) * uint64(b[2])
+	tmp[4] += uint64(a[4]) * uint64(b[0])
+
+	tmp[5] = uint64(a[0]) * uint64(b[5])
+	tmp[5] += uint64(a[1]) * uint64(b[4])
+	tmp[5] += uint64(a[2]) * uint64(b[3])
+	tmp[5] += uint64(a[3]) * uint64(b[2])
+	tmp[5] += uint64(a[4]) * uint64(b[1])
+	tmp[5] += uint64(a[5]) * uint64(b[0])
+
+	tmp[6] = uint64(a[1]) * uint64(b[5])
+	tmp[6] += uint64(a[3]) * uint64(b[3])
+	tmp[6] += uint64(a[5]) * uint64(b[1])
+	tmp[6] <<= 1
+	tmp[6] += uint64(a[0]) * uint64(b[6])
+	tmp[6] += uint64(a[2]) * uint64(b[4])
+	tmp[6] += uint64(a[4]) * uint64(b[2])
+	tmp[6] += uint64(a[6]) * uint64(b[0])
+
+	tmp[7] = uint64(a[0]) * uint64(b[7])
+	tmp[7] += uint64(a[1]) * uint64(b[6])
+	tmp[7] += uint64(a[2]) * uint64(b[5])
+	tmp[7] += uint64(a[3]) * uint64(b[4])
+	tmp[7] += uint64(a[4]) * uint64(b[3])
+	tmp[7] += uint64(a[5]) * uint64(b[2])
+	tmp[7] += uint64(a[6]) * uint64(b[1])
+	tmp[7] += uint64(a[7]) * uint64(b[0])
+
+	tmp[8] = uint64(a[1]) * uint64(b[7])
+	tmp[8] += uint64(a[3]) * uint64(b[5])
+	tmp[8] += uint64(a[5]) * uint64(b[3])
+	tmp[8] += uint64(a[7]) * uint64(b[1])
+	tmp[8] <<= 1
+	tmp[8] += uint64(a[0]) * uint64(b[8])
+	tmp[8] += uint64(a[2]) * uint64(b[6])
+	tmp[8] += uint64(a[4]) * uint64(b[4])
+	tmp[8] += uint64(a[6]) * uint64(b[2])
+	tmp[8] += uint64(a[8]) * uint64(b[0])
+
+	tmp[9] = uint64(a[1]) * uint64(b[8])
+	tmp[9] += uint64(a[2]) * uint64(b[7])
+	tmp[9] += uint64(a[3]) * uint64(b[6])
+	tmp[9] += uint64(a[4]) * uint64(b[5])
+	tmp[9] += uint64(a[5]) * uint64(b[4])
+	tmp[9] += uint64(a[6]) * uint64(b[3])
+	tmp[9] += uint64(a[7]) * uint64(b[2])
+	tmp[9] += uint64(a[8]) * uint64(b[1])
+
+	tmp[10] = uint64(a[3]) * uint64(b[7])
+	tmp[10] += uint64(a[5]) * uint64(b[5])
+	tmp[10] += uint64(a[7]) * uint64(b[3])
+	tmp[10] <<= 1
+	tmp[10] += uint64(a[2]) * uint64(b[8])
+	tmp[10] += uint64(a[4]) * uint64(b[6])
+	tmp[10] += uint64(a[6]) * uint64(b[4])
+	tmp[10] += uint64(a[8]) * uint64(b[2])
+
+	tmp[11] = uint64(a[3]) * uint64(b[8])
+	tmp[11] += uint64(a[4]) * uint64(b[7])
+	tmp[11] += uint64(a[5]) * uint64(b[6])
+	tmp[11] += uint64(a[6]) * uint64(b[5])
+	tmp[11] += uint64(a[7]) * uint64(b[4])
+	tmp[11] += uint64(a[8]) * uint64(b[3])
+
+	tmp[12] = uint64(a[5]) * uint64(b[7])
+	tmp[12] += uint64(a[7]) * uint64(b[5])
+	tmp[12] <<= 1
+	tmp[12] += uint64(a[4]) * uint64(b[8])
+	tmp[12] += uint64(a[6]) * uint64(b[6])
+	tmp[12] += uint64(a[8]) * uint64(b[4])
+
+	tmp[13] = uint64(a[5]) * uint64(b[8])
+	tmp[13] += uint64(a[6]) * uint64(b[7])
+	tmp[13] += uint64(a[7]) * uint64(b[6])
+	tmp[13] += uint64(a[8]) * uint64(b[5])
+
+	tmp[14] = uint64(a[6]) * uint64(b[8])
+	tmp[14] += uint64(a[7]) * uint64(b[7]) << 1
+	tmp[14] += uint64(a[8]) * uint64(b[6])
+
+	tmp[15] = uint64(a[7]) * uint64(b[8])
+	tmp[15] += uint64(a[8]) * uint64(b[7])
+
+	tmp[16] = uint64(a[8]) * uint64(b[8])
+
 	sm2P256ReduceDegree(c, &tmp)
 }
 
-// b = a * a
+func sm2P256Mul2Way(c, a1, b1, c2, a2, b2 *sm2P256FieldElement) {
+	var tmp1, tmp2 sm2P256LargeFieldElement
+
+	addr_a1 := &a1[0]
+	addrA1 := uintptr(unsafe.Pointer(addr_a1))
+	addr_b1 := &b1[0]
+	addrB1 := uintptr(unsafe.Pointer(addr_b1))
+	addr_a2 := &a2[0]
+	addrA2 := uintptr(unsafe.Pointer(addr_a2))
+	addr_b2 := &b2[0]
+	addrB2 := uintptr(unsafe.Pointer(addr_b2))
+	addr_tmp1 := &tmp1[0]
+	addrTmp1 := uintptr(unsafe.Pointer(addr_tmp1))
+	addr_tmp2 := &tmp2[0]
+	addrTmp2 := uintptr(unsafe.Pointer(addr_tmp2))
+	_sm2P256Mul2Way1((*uint64)(unsafe.Pointer(addrTmp1)), (*uint32)(unsafe.Pointer(addrA1)),
+		(*uint32)(unsafe.Pointer(addrB1)), (*uint64)(unsafe.Pointer(addrTmp2)),
+		(*uint32)(unsafe.Pointer(addrA2)), (*uint32)(unsafe.Pointer(addrB2)))
+
+	tmp1[8] = uint64(a1[1]) * uint64(b1[7])
+	tmp1[8] += uint64(a1[3]) * uint64(b1[5])
+	tmp1[8] += uint64(a1[5]) * uint64(b1[3])
+	tmp1[8] += uint64(a1[7]) * uint64(b1[1])
+	tmp1[8] <<= 1
+	tmp1[8] += uint64(a1[0]) * uint64(b1[8])
+	tmp1[8] += uint64(a1[2]) * uint64(b1[6])
+	tmp1[8] += uint64(a1[4]) * uint64(b1[4])
+	tmp1[8] += uint64(a1[6]) * uint64(b1[2])
+	tmp1[8] += uint64(a1[8]) * uint64(b1[0])
+
+	tmp2[8] = uint64(a2[1]) * uint64(b2[7])
+	tmp2[8] += uint64(a2[3]) * uint64(b2[5])
+	tmp2[8] += uint64(a2[5]) * uint64(b2[3])
+	tmp2[8] += uint64(a2[7]) * uint64(b2[1])
+	tmp2[8] <<= 1
+	tmp2[8] += uint64(a2[0]) * uint64(b2[8])
+	tmp2[8] += uint64(a2[2]) * uint64(b2[6])
+	tmp2[8] += uint64(a2[4]) * uint64(b2[4])
+	tmp2[8] += uint64(a2[6]) * uint64(b2[2])
+	tmp2[8] += uint64(a2[8]) * uint64(b2[0])
+
+	_sm2P256Mul2Way2((*uint64)(unsafe.Pointer(addrTmp1)), (*uint32)(unsafe.Pointer(addrA1)),
+		(*uint32)(unsafe.Pointer(addrB1)), (*uint64)(unsafe.Pointer(addrTmp2)),
+		(*uint32)(unsafe.Pointer(addrA2)), (*uint32)(unsafe.Pointer(addrB2)))
+
+	sm2P256ReduceDegree2Way(c, c2, &tmp1, &tmp2)
+	// sm2P256ReduceDegree(c, &tmp1)
+	// sm2P256ReduceDegree(c2, &tmp2)
+	// return tmp1, tmp2
+}
+
 func sm2P256Square(b, a *sm2P256FieldElement) {
+
 	var tmp sm2P256LargeFieldElement
 
 	tmp[0] = uint64(a[0]) * uint64(a[0])
-	tmp[1] = uint64(a[0]) * (uint64(a[1]) << 1)
-	tmp[2] = uint64(a[0])*(uint64(a[2])<<1) +
-		uint64(a[1])*(uint64(a[1])<<1)
-	tmp[3] = uint64(a[0])*(uint64(a[3])<<1) +
-		uint64(a[1])*(uint64(a[2])<<1)
-	tmp[4] = uint64(a[0])*(uint64(a[4])<<1) +
-		uint64(a[1])*(uint64(a[3])<<2) +
-		uint64(a[2])*uint64(a[2])
-	tmp[5] = uint64(a[0])*(uint64(a[5])<<1) +
-		uint64(a[1])*(uint64(a[4])<<1) +
-		uint64(a[2])*(uint64(a[3])<<1)
-	tmp[6] = uint64(a[0])*(uint64(a[6])<<1) +
-		uint64(a[1])*(uint64(a[5])<<2) +
-		uint64(a[2])*(uint64(a[4])<<1) +
-		uint64(a[3])*(uint64(a[3])<<1)
-	tmp[7] = uint64(a[0])*(uint64(a[7])<<1) +
-		uint64(a[1])*(uint64(a[6])<<1) +
-		uint64(a[2])*(uint64(a[5])<<1) +
-		uint64(a[3])*(uint64(a[4])<<1)
-	// tmp[8] has the greatest value of 2**61 + 2**60 + 2**61 + 2**60 + 2**60,
-	// which is < 2**64 as required.
-	tmp[8] = uint64(a[0])*(uint64(a[8])<<1) +
-		uint64(a[1])*(uint64(a[7])<<2) +
-		uint64(a[2])*(uint64(a[6])<<1) +
-		uint64(a[3])*(uint64(a[5])<<2) +
-		uint64(a[4])*uint64(a[4])
-	tmp[9] = uint64(a[1])*(uint64(a[8])<<1) +
-		uint64(a[2])*(uint64(a[7])<<1) +
-		uint64(a[3])*(uint64(a[6])<<1) +
-		uint64(a[4])*(uint64(a[5])<<1)
-	tmp[10] = uint64(a[2])*(uint64(a[8])<<1) +
-		uint64(a[3])*(uint64(a[7])<<2) +
-		uint64(a[4])*(uint64(a[6])<<1) +
-		uint64(a[5])*(uint64(a[5])<<1)
-	tmp[11] = uint64(a[3])*(uint64(a[8])<<1) +
-		uint64(a[4])*(uint64(a[7])<<1) +
-		uint64(a[5])*(uint64(a[6])<<1)
-	tmp[12] = uint64(a[4])*(uint64(a[8])<<1) +
-		uint64(a[5])*(uint64(a[7])<<2) +
-		uint64(a[6])*uint64(a[6])
-	tmp[13] = uint64(a[5])*(uint64(a[8])<<1) +
-		uint64(a[6])*(uint64(a[7])<<1)
-	tmp[14] = uint64(a[6])*(uint64(a[8])<<1) +
-		uint64(a[7])*(uint64(a[7])<<1)
-	tmp[15] = uint64(a[7]) * (uint64(a[8]) << 1)
+
+	tmp[1] = uint64(a[0]) * uint64(a[1]) << 1
+
+	tmp[2] = uint64(a[0]) * uint64(a[2])
+	tmp[2] += uint64(a[1]) * uint64(a[1])
+	tmp[2] <<= 1
+
+	tmp[3] = uint64(a[0]) * uint64(a[3])
+	tmp[3] += uint64(a[1]) * uint64(a[2])
+	tmp[3] <<= 1
+
+	tmp[4] = uint64(a[0]) * uint64(a[4])
+	tmp[4] += uint64(a[1]) * uint64(a[3]) << 1
+	tmp[4] <<= 1
+	tmp[4] += uint64(a[2]) * uint64(a[2])
+
+	tmp[5] = uint64(a[0]) * uint64(a[5])
+	tmp[5] += uint64(a[1]) * uint64(a[4])
+	tmp[5] += uint64(a[2]) * uint64(a[3])
+	tmp[5] <<= 1
+
+	tmp[6] = uint64(a[0]) * uint64(a[6])
+	tmp[6] += uint64(a[1]) * uint64(a[5]) << 1
+	tmp[6] += uint64(a[2]) * uint64(a[4])
+	tmp[6] += uint64(a[3]) * uint64(a[3])
+	tmp[6] <<= 1
+
+	tmp[7] = uint64(a[0]) * uint64(a[7])
+	tmp[7] += uint64(a[1]) * uint64(a[6])
+	tmp[7] += uint64(a[2]) * uint64(a[5])
+	tmp[7] += uint64(a[3]) * uint64(a[4])
+	tmp[7] <<= 1
+
+	tmp[8] = uint64(a[0]) * uint64(a[8])
+	tmp[8] += uint64(a[1]) * uint64(a[7]) << 1
+	tmp[8] += uint64(a[2]) * uint64(a[6])
+	tmp[8] += uint64(a[3]) * uint64(a[5]) << 1
+	tmp[8] <<= 1
+	tmp[8] += uint64(a[4]) * uint64(a[4])
+
+	tmp[9] = uint64(a[1]) * uint64(a[8])
+	tmp[9] += uint64(a[2]) * uint64(a[7])
+	tmp[9] += uint64(a[3]) * uint64(a[6])
+	tmp[9] += uint64(a[4]) * uint64(a[5])
+	tmp[9] <<= 1
+
+	tmp[10] = uint64(a[2]) * uint64(a[8])
+	tmp[10] += uint64(a[3]) * uint64(a[7]) << 1
+	tmp[10] += uint64(a[4]) * uint64(a[6])
+	tmp[10] += uint64(a[5]) * uint64(a[5])
+	tmp[10] <<= 1
+
+	tmp[11] = uint64(a[3]) * uint64(a[8])
+	tmp[11] += uint64(a[4]) * uint64(a[7])
+	tmp[11] += uint64(a[5]) * uint64(a[6])
+	tmp[11] <<= 1
+
+	tmp[12] = uint64(a[4]) * uint64(a[8])
+	tmp[12] += uint64(a[5]) * uint64(a[7]) << 1
+	tmp[12] <<= 1
+	tmp[12] += uint64(a[6]) * uint64(a[6])
+
+	tmp[13] = uint64(a[5]) * uint64(a[8])
+	tmp[13] += uint64(a[6]) * uint64(a[7])
+	tmp[13] <<= 1
+
+	tmp[14] = uint64(a[6]) * uint64(a[8])
+	tmp[14] += uint64(a[7]) * uint64(a[7])
+	tmp[14] <<= 1
+
+	tmp[15] = uint64(a[7]) * uint64(a[8]) << 1
+
 	tmp[16] = uint64(a[8]) * uint64(a[8])
+
 	sm2P256ReduceDegree(b, &tmp)
 }
 
-// nonZeroToAllOnes returns:
+func sm2P256Square2Way(b, a, b2, a2 *sm2P256FieldElement) {
+	var tmp, tmp2 sm2P256LargeFieldElement
+
+	addr1 := &tmp[0]
+	addrTMP1 := uintptr(unsafe.Pointer(addr1))
+	addr1 = &tmp2[0]
+	addrTMP2 := uintptr(unsafe.Pointer(addr1))
+
+	addr2 := &a[0]
+	addrA := uintptr(unsafe.Pointer(addr2))
+	addr2 = &a2[0]
+	addrA2 := uintptr(unsafe.Pointer(addr2))
+
+	_sm2P256Square2Way((*uint64)(unsafe.Pointer(addrTMP1)), (*uint32)(unsafe.Pointer(addrA)),
+		(*uint64)(unsafe.Pointer(addrTMP2)), (*uint32)(unsafe.Pointer(addrA2)))
+
+	sm2P256ReduceDegree2Way(b, b2, &tmp, &tmp2)
+}
+
+// poisitiveToAllOnes returns:
 //   0xffffffff for 0 < x <= 2**31
 //   0 for x == 0 or x > 2**31.
-func nonZeroToAllOnes(x uint32) uint32 {
+func poisitiveToAllOnes(x uint32) uint32 {
 	return ((x - 1) >> 31) - 1
 }
 
@@ -804,6 +931,11 @@ var sm2P256Carry = [8 * 9]uint32{
 }
 
 // carry < 2 ^ 3
+// p的P256表示
+// FFFFFFF EFFFFFF 1FFFFFFF FFFFFFF 1FFFFFFF FFFFC00 7F FFFFFFF 1FFFFFFFF
+// -2p的P256表示
+// 0 0 2000000 0 0 0 7ff 1fffff00 0 2
+//
 func sm2P256ReduceCarry(a *sm2P256FieldElement, carry uint32) {
 	a[0] += sm2P256Carry[carry*9+0]
 	a[2] += sm2P256Carry[carry*9+2]
@@ -811,200 +943,312 @@ func sm2P256ReduceCarry(a *sm2P256FieldElement, carry uint32) {
 	a[7] += sm2P256Carry[carry*9+7]
 }
 
-// 这代码真是丑比了，我也是对自己醉了。。。
-// 你最好别改这个代码，不然你会死的很惨。。
+// 计算 (b + (b*pprime mod r) * p) / r
 func sm2P256ReduceDegree(a *sm2P256FieldElement, b *sm2P256LargeFieldElement) {
-	var tmp [18]uint32
-	var carry, x, xMask uint32
+	var tmp64 [10]uint64
+	var carry uint32
+	var x64 uint64
+	j, j1, j2, j3, j4, j5 := 0, 1, 2, 3, 4, 5
 
-	// tmp
-	// 0  | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  |  9 | 10 ...
-	// 29 | 28 | 29 | 28 | 29 | 28 | 29 | 28 | 29 | 28 | 29 ...
-	tmp[0] = uint32(b[0]) & bottom29Bits
-	tmp[1] = uint32(b[0]) >> 29
-	tmp[1] |= (uint32(b[0]>>32) << 3) & bottom28Bits
-	tmp[1] += uint32(b[1]) & bottom28Bits
-	carry = tmp[1] >> 28
-	tmp[1] &= bottom28Bits
-	for i := 2; i < 17; i++ {
-		tmp[i] = (uint32(b[i-2] >> 32)) >> 25
-		tmp[i] += (uint32(b[i-1])) >> 28
-		tmp[i] += (uint32(b[i-1]>>32) << 4) & bottom29Bits
-		tmp[i] += uint32(b[i]) & bottom29Bits
-		tmp[i] += carry
-		carry = tmp[i] >> 29
-		tmp[i] &= bottom29Bits
+	sm2P256FromLargeElement(&tmp64, b)
 
-		i++
-		if i == 17 {
-			break
-		}
-		tmp[i] = uint32(b[i-2]>>32) >> 25
-		tmp[i] += uint32(b[i-1]) >> 29
-		tmp[i] += ((uint32(b[i-1] >> 32)) << 3) & bottom28Bits
-		tmp[i] += uint32(b[i]) & bottom28Bits
-		tmp[i] += carry
-		carry = tmp[i] >> 28
-		tmp[i] &= bottom28Bits
+	// 后一位超出来的部分加到前一位上去
+	tmp64[j1] += tmp64[j] >> 57
+	x64 = tmp64[j] & bottom57BitsMask
+	if x64 > 0 {
+
+		tmp64[j1] += (x64 << 7) & bottom57BitsMask
+		tmp64[j2] += x64 >> 50
+
+		tmp64[j1] += twoPower57
+		tmp64[j2] += bottom57BitsMask
+
+		tmp64[j1] -= (x64 << 39) & bottom57BitsMask
+		tmp64[j2] -= x64 >> 18
+
+		tmp64[j3] += bottom57BitsMask
+		tmp64[j4] += bottom57BitsMask
+
+		tmp64[j3] -= (x64 << 53) & bottom57BitsMask
+		tmp64[j4] -= (x64 >> 4) & bottom57BitsMask
+
+		tmp64[j5] -= 1
+		tmp64[j4] += (x64 << 28) & bottom57BitsMask
+		tmp64[j5] += (x64 >> 29) & bottom29BitsMask
+
 	}
-	tmp[17] = uint32(b[15]>>32) >> 25
-	tmp[17] += uint32(b[16]) >> 29
-	tmp[17] += uint32(b[16]>>32) << 3
-	tmp[17] += carry
+	j, j1, j2, j3, j4, j5 = j1, j2, j3, j4, j5, j5+1
 
-	for i := 0; ; i += 2 {
+	tmp64[j1] += tmp64[j] >> 57
+	x64 = tmp64[j] & bottom57BitsMask
+	if x64 > 0 {
 
-		tmp[i+1] += tmp[i] >> 29
-		x = tmp[i] & bottom29Bits
-		tmp[i] = 0
-		if x > 0 {
-			set4 := uint32(0)
-			set7 := uint32(0)
-			xMask = nonZeroToAllOnes(x)
-			tmp[i+2] += (x << 7) & bottom29Bits
-			tmp[i+3] += x >> 22
-			if tmp[i+3] < 0x10000000 {
-				set4 = 1
-				tmp[i+3] += 0x10000000 & xMask
-				tmp[i+3] -= (x << 10) & bottom28Bits
-			} else {
-				tmp[i+3] -= (x << 10) & bottom28Bits
-			}
-			if tmp[i+4] < 0x20000000 {
-				tmp[i+4] += 0x20000000 & xMask
-				tmp[i+4] -= set4 // 借位
-				tmp[i+4] -= x >> 18
-				if tmp[i+5] < 0x10000000 {
-					tmp[i+5] += 0x10000000 & xMask
-					tmp[i+5] -= 1 // 借位
-					if tmp[i+6] < 0x20000000 {
-						set7 = 1
-						tmp[i+6] += 0x20000000 & xMask
-						tmp[i+6] -= 1 // 借位
-					} else {
-						tmp[i+6] -= 1 // 借位
-					}
-				} else {
-					tmp[i+5] -= 1
-				}
-			} else {
-				tmp[i+4] -= set4 // 借位
-				tmp[i+4] -= x >> 18
-			}
-			if tmp[i+7] < 0x10000000 {
-				tmp[i+7] += 0x10000000 & xMask
-				tmp[i+7] -= set7
-				tmp[i+7] -= (x << 24) & bottom28Bits
-				tmp[i+8] += (x << 28) & bottom29Bits
-				if tmp[i+8] < 0x20000000 {
-					tmp[i+8] += 0x20000000 & xMask
-					tmp[i+8] -= 1
-					tmp[i+8] -= x >> 4
-					tmp[i+9] += ((x >> 1) - 1) & xMask
-				} else {
-					tmp[i+8] -= 1
-					tmp[i+8] -= x >> 4
-					tmp[i+9] += (x >> 1) & xMask
-				}
-			} else {
-				tmp[i+7] -= set7 // 借位
-				tmp[i+7] -= (x << 24) & bottom28Bits
-				tmp[i+8] += (x << 28) & bottom29Bits
-				if tmp[i+8] < 0x20000000 {
-					tmp[i+8] += 0x20000000 & xMask
-					tmp[i+8] -= x >> 4
-					tmp[i+9] += ((x >> 1) - 1) & xMask
-				} else {
-					tmp[i+8] -= x >> 4
-					tmp[i+9] += (x >> 1) & xMask
-				}
-			}
+		tmp64[j1] += (x64 << 7) & bottom57BitsMask
+		tmp64[j2] += x64 >> 50
 
-		}
+		tmp64[j1] += twoPower57
+		tmp64[j2] += bottom57BitsMask
 
-		if i+1 == 9 {
-			break
-		}
+		tmp64[j1] -= (x64 << 39) & bottom57BitsMask
+		tmp64[j2] -= x64 >> 18
 
-		tmp[i+2] += tmp[i+1] >> 28
-		x = tmp[i+1] & bottom28Bits
-		tmp[i+1] = 0
-		if x > 0 {
-			set5 := uint32(0)
-			set8 := uint32(0)
-			set9 := uint32(0)
-			xMask = nonZeroToAllOnes(x)
-			tmp[i+3] += (x << 7) & bottom28Bits
-			tmp[i+4] += x >> 21
-			if tmp[i+4] < 0x20000000 {
-				set5 = 1
-				tmp[i+4] += 0x20000000 & xMask
-				tmp[i+4] -= (x << 11) & bottom29Bits
-			} else {
-				tmp[i+4] -= (x << 11) & bottom29Bits
-			}
-			if tmp[i+5] < 0x10000000 {
-				tmp[i+5] += 0x10000000 & xMask
-				tmp[i+5] -= set5 // 借位
-				tmp[i+5] -= x >> 18
-				if tmp[i+6] < 0x20000000 {
-					tmp[i+6] += 0x20000000 & xMask
-					tmp[i+6] -= 1 // 借位
-					if tmp[i+7] < 0x10000000 {
-						set8 = 1
-						tmp[i+7] += 0x10000000 & xMask
-						tmp[i+7] -= 1 // 借位
-					} else {
-						tmp[i+7] -= 1 // 借位
-					}
-				} else {
-					tmp[i+6] -= 1 // 借位
-				}
-			} else {
-				tmp[i+5] -= set5 // 借位
-				tmp[i+5] -= x >> 18
-			}
-			if tmp[i+8] < 0x20000000 {
-				set9 = 1
-				tmp[i+8] += 0x20000000 & xMask
-				tmp[i+8] -= set8
-				tmp[i+8] -= (x << 25) & bottom29Bits
-			} else {
-				tmp[i+8] -= set8
-				tmp[i+8] -= (x << 25) & bottom29Bits
-			}
-			if tmp[i+9] < 0x10000000 {
-				tmp[i+9] += 0x10000000 & xMask
-				tmp[i+9] -= set9 // 借位
-				tmp[i+9] -= x >> 4
-				tmp[i+10] += (x - 1) & xMask
-			} else {
-				tmp[i+9] -= set9 // 借位
-				tmp[i+9] -= x >> 4
-				tmp[i+10] += x & xMask
-			}
-		}
+		tmp64[j3] += bottom57BitsMask
+		tmp64[j4] += bottom57BitsMask
+
+		tmp64[j3] -= (x64 << 53) & bottom57BitsMask
+		tmp64[j4] -= (x64 >> 4) & bottom57BitsMask
+
+		tmp64[j5] -= 1
+		tmp64[j4] += (x64 << 28) & bottom57BitsMask
+		tmp64[j5] += (x64 >> 29) & bottom29BitsMask
+
+	}
+	j, j1, j2, j3, j4, j5 = j1, j2, j3, j4, j5, j5+1
+
+	tmp64[j1] += tmp64[j] >> 57
+	x64 = tmp64[j] & bottom57BitsMask
+	if x64 > 0 {
+
+		tmp64[j1] += (x64 << 7) & bottom57BitsMask
+		tmp64[j2] += x64 >> 50
+
+		tmp64[j1] += twoPower57
+		tmp64[j2] += bottom57BitsMask
+
+		tmp64[j1] -= (x64 << 39) & bottom57BitsMask
+		tmp64[j2] -= x64 >> 18
+
+		tmp64[j3] += bottom57BitsMask
+		tmp64[j4] += bottom57BitsMask
+
+		tmp64[j3] -= (x64 << 53) & bottom57BitsMask
+		tmp64[j4] -= (x64 >> 4) & bottom57BitsMask
+
+		tmp64[j5] -= 1
+		tmp64[j4] += (x64 << 28) & bottom57BitsMask
+		tmp64[j5] += (x64 >> 29) & bottom29BitsMask
+
+	}
+	j, j1, j2, j3, j4, j5 = j1, j2, j3, j4, j5, j5+1
+
+	tmp64[j1] += tmp64[j] >> 57
+	x64 = tmp64[j] & bottom57BitsMask
+	if x64 > 0 {
+
+		tmp64[j1] += (x64 << 7) & bottom57BitsMask
+		tmp64[j2] += x64 >> 50
+
+		tmp64[j1] += twoPower57
+		tmp64[j2] += bottom57BitsMask
+
+		tmp64[j1] -= (x64 << 39) & bottom57BitsMask
+		tmp64[j2] -= x64 >> 18
+
+		tmp64[j3] += bottom57BitsMask
+		tmp64[j4] += bottom57BitsMask
+
+		tmp64[j3] -= (x64 << 53) & bottom57BitsMask
+		tmp64[j4] -= (x64 >> 4) & bottom57BitsMask
+
+		tmp64[j5] -= 1
+		tmp64[j4] += (x64 << 28) & bottom57BitsMask
+		tmp64[j5] += (x64 >> 29) & bottom29BitsMask
+
+	}
+	j, j1, j2, j3, j4, j5 = j1, j2, j3, j4, j5, j5+1
+
+	x64 = tmp64[j] & bottom29BitsMask
+	tmp64[j] = (tmp64[j] >> 29) << 29
+
+	if x64 > 0 {
+
+		tmp64[j1] += (x64 << 7) & bottom57BitsMask
+		tmp64[j2] += x64 >> 50
+
+		tmp64[j1] += twoPower57
+		tmp64[j2] += bottom57BitsMask
+
+		tmp64[j1] -= (x64 << 39) & bottom57BitsMask
+		tmp64[j2] -= x64 >> 18
+
+		tmp64[j3] += bottom57BitsMask
+		tmp64[j4] += bottom57BitsMask
+
+		tmp64[j3] -= (x64 << 53) & bottom57BitsMask
+		tmp64[j4] -= (x64 >> 4) & bottom57BitsMask
+
+		tmp64[j5] -= 1
+		tmp64[j4] += (x64 << 28) & bottom57BitsMask
+		tmp64[j5] += (x64 >> 29) & bottom29BitsMask
+
 	}
 
-	carry = uint32(0)
-	for i := 0; i < 8; i++ {
-		a[i] = tmp[i+9]
-		a[i] += carry
-		a[i] += (tmp[i+10] << 28) & bottom29Bits
-		carry = a[i] >> 29
-		a[i] &= bottom29Bits
-
-		i++
-		a[i] = tmp[i+9] >> 1
-		a[i] += carry
-		carry = a[i] >> 28
-		a[i] &= bottom28Bits
+	if tmp64[9]+1 == 0 {
+		tmp64[9] = 0
+		tmp64[8] -= twoPower57
 	}
-	a[8] = tmp[17]
-	a[8] += carry
-	carry = a[8] >> 29
-	a[8] &= bottom29Bits
+
+	carry = sm2P256DivideByR(a, &tmp64)
+	// fmt.Println(carry)
 	sm2P256ReduceCarry(a, carry)
+}
+
+func sm2P256ReduceDegree2Way(a, a2 *sm2P256FieldElement, b, b2 *sm2P256LargeFieldElement) {
+	var tmp64, tmp642 [10]uint64
+	var carry, carry2 uint32
+
+	addr1 := &tmp64[0]
+	addrTMP1 := uintptr(unsafe.Pointer(addr1))
+	addr1 = &tmp642[0]
+	addrTMP2 := uintptr(unsafe.Pointer(addr1))
+
+	addr1 = &b[0]
+	addrB1 := uintptr(unsafe.Pointer(addr1))
+	addr1 = &b2[0]
+	addrB2 := uintptr(unsafe.Pointer(addr1))
+
+	addr2 := &a[0]
+	addrA := uintptr(unsafe.Pointer(addr2))
+	addr2 = &a2[0]
+	addrA2 := uintptr(unsafe.Pointer(addr2))
+
+	// sm2P256FromLargeElement(&tmp64, b)
+	// sm2P256FromLargeElement(&tmp642, b2)
+	// _sm2P256FromLargeElement_2Way((*uint64)(unsafe.Pointer(addrTMP1)), (*uint64)(unsafe.Pointer(addrB1)),
+	// 	(*uint64)(unsafe.Pointer(addrTMP2)), (*uint64)(unsafe.Pointer(addrB2)))
+
+	// _reduceDegree_2wayNew((*uint64)(unsafe.Pointer(addrTMP1)), (*uint64)(unsafe.Pointer(addrTMP2)))
+
+	// carry_temp := _sm2P256DivideByR_2way((*uint32)(unsafe.Pointer(addrA)), (*uint32)(unsafe.Pointer(addrA2)),
+	// 	(*uint64)(unsafe.Pointer(addrTMP1)), (*uint64)(unsafe.Pointer(addrTMP2)))
+	// carry = sm2P256DivideByR(a, &tmp64)
+	// carry2 = sm2P256DivideByR(a2, &tmp642)
+
+	carry_temp := _sm2ReduceDegree_2way((*uint32)(unsafe.Pointer(addrA)), (*uint32)(unsafe.Pointer(addrA2)),
+		(*uint64)(unsafe.Pointer(addrB1)), (*uint64)(unsafe.Pointer(addrB2)),
+		(*uint64)(unsafe.Pointer(addrTMP1)), (*uint64)(unsafe.Pointer(addrTMP2)))
+	carry = uint32(carry_temp)
+	carry2 = uint32(carry_temp >> 32)
+
+	// fmt.Println(carry_temp, carry, carry2)
+	sm2P256ReduceCarry(a, carry)
+	sm2P256ReduceCarry(a2, carry2)
+	// return carry, carry2
+}
+
+func sm2P256DivideByR(a *sm2P256FieldElement, tmp *[10]uint64) (carry uint32) {
+	a[0] = uint32(tmp[4] >> 29)
+	a[0] += uint32(tmp[5]<<28) & bottom29BitsMask
+	carry = a[0] >> 29
+	a[0] &= bottom29BitsMask
+
+	a[1] = uint32(tmp[5]>>1) & bottom28BitsMask
+	a[1] += carry
+	carry = a[1] >> 28
+	a[1] &= bottom28BitsMask
+
+	a[2] = uint32(tmp[5] >> 29)
+	a[2] += carry
+	a[2] += uint32(tmp[6]<<28) & bottom29BitsMask
+	carry = a[2] >> 29
+	a[2] &= bottom29BitsMask
+
+	a[3] = uint32(tmp[6]>>1) & bottom28BitsMask
+	a[3] += carry
+	carry = a[3] >> 28
+	a[3] &= bottom28BitsMask
+
+	a[4] = uint32(tmp[6] >> 29)
+	a[4] += carry
+	a[4] += uint32(tmp[7]<<28) & bottom29BitsMask
+	carry = a[4] >> 29
+	a[4] &= bottom29BitsMask
+
+	a[5] = uint32(tmp[7]>>1) & bottom28BitsMask
+	a[5] += carry
+	carry = a[5] >> 28
+	a[5] &= bottom28BitsMask
+
+	a[6] = uint32(tmp[7] >> 29)
+	a[6] += carry
+	a[6] += uint32(tmp[8]<<28) & bottom29BitsMask
+	carry = a[6] >> 29
+	a[6] &= bottom29BitsMask
+
+	a[7] = uint32(tmp[8]>>1) & bottom28BitsMask
+	a[7] += carry
+	carry = a[7] >> 28
+	a[7] &= bottom28BitsMask
+
+	a[8] = uint32(tmp[8] >> 29)
+	a[8] += carry
+	a[8] += (uint32(tmp[9] << 28)) & bottom29BitsMask
+	carry = a[8] >> 29
+	a[8] &= bottom29BitsMask
+	return
+}
+
+func sm2P256FromLargeElement(a *[10]uint64, b *sm2P256LargeFieldElement) {
+	var carry uint64
+
+	a[0] = b[0]
+	a[0] += ((b[1] << 29) & bottom57BitsMask)
+	carry = a[0] >> 57
+	a[0] = a[0] & bottom57BitsMask
+
+	a[1] = carry
+	a[1] += b[1] >> 28
+	a[1] += b[2]
+	a[1] += (b[3] << 29) & bottom57BitsMask
+	carry = a[1] >> 57
+	a[1] = a[1] & bottom57BitsMask
+
+	a[2] = carry
+	a[2] += b[3] >> 28
+	a[2] += b[4]
+	a[2] += (b[5] << 29) & bottom57BitsMask
+	carry = a[2] >> 57
+	a[2] = a[2] & bottom57BitsMask
+
+	a[3] = carry
+	a[3] += b[5] >> 28
+	a[3] += b[6]
+	a[3] += (b[7] << 29) & bottom57BitsMask
+	carry = a[3] >> 57
+	a[3] = a[3] & bottom57BitsMask
+
+	a[4] = carry
+	a[4] += b[7] >> 28
+	a[4] += b[8]
+	a[4] += (b[9] << 29) & bottom57BitsMask
+	carry = a[4] >> 57
+	a[4] = a[4] & bottom57BitsMask
+
+	a[5] = carry
+	a[5] += b[9] >> 28
+	a[5] += b[10]
+	a[5] += (b[11] << 29) & bottom57BitsMask
+	carry = a[5] >> 57
+	a[5] = a[5] & bottom57BitsMask
+
+	a[6] = carry
+	a[6] += b[11] >> 28
+	a[6] += b[12]
+	a[6] += (b[13] << 29) & bottom57BitsMask
+	carry = a[6] >> 57
+	a[6] = a[6] & bottom57BitsMask
+
+	a[7] = carry
+	a[7] += b[13] >> 28
+	a[7] += b[14]
+	a[7] += (b[15] << 29) & bottom57BitsMask
+	carry = a[7] >> 57
+	a[7] = a[7] & bottom57BitsMask
+
+	a[8] = carry
+	a[8] += b[15] >> 28
+	a[8] += b[16]
+	a[9] = 0
 }
 
 // b = a
@@ -1012,45 +1256,80 @@ func sm2P256Dup(b, a *sm2P256FieldElement) {
 	*b = *a
 }
 
-// X = a * R mod P
+func getBottomNBitsMask(n uint32) uint32 {
+	if n == 28 {
+		return bottom28BitsMask
+	}
+	if n == 29 {
+		return bottom29BitsMask
+	}
+	return 0
+}
+
+func getBottomNBits(x *big.Int, n uint32) uint32 {
+	if bits := x.Bits(); len(bits) > 0 {
+		return uint32(bits[0]) & getBottomNBitsMask(n)
+	} else {
+		return 0
+	}
+}
+
+func getBottom29Bits(x *big.Int) uint32 {
+	return getBottomNBits(x, 29)
+}
+
+func getBottom28Bits(x *big.Int) uint32 {
+	return getBottomNBits(x, 28)
+}
+
+// 把a表示成长度为29,28,...,28,29（共9个元素）的数组
+func sm2P256FromBigPlain(X *sm2P256FieldElement, x *big.Int) {
+
+	X[0] = getBottom29Bits(x)
+	x.Rsh(x, 29)
+
+	i := 1
+	for i < 8 {
+		X[i] = getBottom28Bits(x)
+		x.Rsh(x, 28)
+		i++
+
+		X[i] = getBottom29Bits(x)
+		x.Rsh(x, 29)
+		i++
+	}
+}
+
+// X = a * R mod P (R = 2**257)
 func sm2P256FromBig(X *sm2P256FieldElement, a *big.Int) {
 	x := new(big.Int).Lsh(a, 257)
 	x.Mod(x, sm2P256.P)
-	for i := 0; i < 9; i++ {
-		if bits := x.Bits(); len(bits) > 0 {
-			X[i] = uint32(bits[0]) & bottom29Bits
-		} else {
-			X[i] = 0
-		}
-		x.Rsh(x, 29)
-		i++
-		if i == 9 {
-			break
-		}
-		if bits := x.Bits(); len(bits) > 0 {
-			X[i] = uint32(bits[0]) & bottom28Bits
-		} else {
-			X[i] = 0
-		}
-		x.Rsh(x, 28)
-	}
+	sm2P256FromBigPlain(X, x)
 }
 
 // X = r * R mod P
 // r = X * R' mod P
 func sm2P256ToBig(X *sm2P256FieldElement) *big.Int {
-	r, tm := new(big.Int), new(big.Int)
-	r.SetInt64(int64(X[8]))
-	for i := 7; i >= 0; i-- {
-		if (i & 1) == 0 {
-			r.Lsh(r, 29)
-		} else {
-			r.Lsh(r, 28)
-		}
-		tm.SetInt64(int64(X[i]))
-		r.Add(r, tm)
-	}
+	r := sm2P256ToBigPlain(X)
 	r.Mul(r, sm2P256.RInverse)
 	r.Mod(r, sm2P256.P)
+	return r
+}
+
+func sm2P256ToBigPlain(X *sm2P256FieldElement) *big.Int {
+	r, tm := new(big.Int), new(big.Int)
+	r.SetInt64(int64(X[8]))
+
+	i := 7
+	for i >= 0 {
+		r.Lsh(r, 28)
+		tm.SetInt64(int64(X[i]))
+		r.Add(r, tm)
+		i--
+		r.Lsh(r, 29)
+		tm.SetInt64(int64(X[i]))
+		r.Add(r, tm)
+		i--
+	}
 	return r
 }
