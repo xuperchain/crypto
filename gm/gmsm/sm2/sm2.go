@@ -444,6 +444,9 @@ func Encrypt(pub *PublicKey, data []byte) ([]byte, error) {
 		6. 计算C3 = M⊕ct
 		7. 密文C=C1||C2||C3
 	*/
+	if len(data) == 0 {
+		return []byte{}, nil
+	}
 	length := len(data)
 	for {
 		c := []byte{}
@@ -491,6 +494,9 @@ func Encrypt(pub *PublicKey, data []byte) ([]byte, error) {
 }
 
 func Decrypt(priv *PrivateKey, data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return []byte{}, nil
+	}
 	data = data[1:]
 	length := len(data) - 96
 	curve := priv.Curve
