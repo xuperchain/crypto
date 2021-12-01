@@ -2,6 +2,8 @@ package sign
 
 import (
 	"crypto/ecdsa"
+	"crypto/rand"
+	"encoding/asn1"
 	"encoding/json"
 	"fmt"
 
@@ -27,12 +29,11 @@ func SignECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) {
 	key.Y = k.Y
 	key.D = k.D
 
-	r, s, err := sm2.Sign(key, msg)
+	signature, err = key.Sign(rand.Reader, msg, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to sign the msg [%s]", err)
 	}
-	return MarshalECDSASignature(r, s)
-
+	return signature, nil
 }
 
 // 判断是否是国密标准的公钥
@@ -68,15 +69,15 @@ func SignV2ECDSA(k *ecdsa.PrivateKey, msg []byte) (signature []byte, err error) 
 	key.Y = k.Y
 	key.D = k.D
 
-	r, s, err := sm2.Sign(key, msg)
+	sign, err := key.Sign(rand.Reader, msg, nil)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to sign the msg [%s]", err)
 	}
 
 	// 生成ECDSA签名：(sum(S), R)
-	ecdsaSig := &common.ECDSASignature{
-		R: r,
-		S: s,
+	var ecdsaSig common.ECDSASignature
+	if _, err := asn1.Unmarshal(sign, &ecdsaSig); err != nil {
+		return nil, err
 	}
 
 	// 生成超级签名
