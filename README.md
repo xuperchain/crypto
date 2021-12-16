@@ -2,14 +2,14 @@
 
 This project is the crypto library for XuperChain.
 
-����Ŀ�ǳ�������ص������ģ�顣Ŀǰ��Դ�����Ѿ�֧����Xuperͳһ����ǩ���㷨��Schnorrǩ������ǩ��������ǩ���ȶ���ǩ���㷨��Ҳ֧�������ܷ������ֲ�ȷ���Լӽ��ܵȶ�������ѧ������
+本项目是超级链相关的密码库模块。目前开源部分已经支持了Xuper统一超级签名算法、Schnorr签名，环签名、多重签名等多种签名算法。也支持了秘密分享、分层确定性加解密等多种密码学能力。
 
-NISTϵ���㷨�����ã�
+NIST系列算法请引用：
 "github.com/xuperchain/crypto/client/service/xchain"
 
-��ϸ����˵����ο�����ĺ���ע��
+详细函数说明请参考该类的函数注释
 
-ʹ�����ӣ�
+使用例子：
 ```
 import (
 	"log"
@@ -32,12 +32,12 @@ log.Printf("mnemonic is %v, jsonPrivateKey is %v, jsonPublicKey is %v and addres
 
 ------
 
-����ϵ���㷨�����ã�
+国密系列算法请引用：
 "github.com/xuperchain/crypto/client/service/gm"
 
-��ϸ����˵����ο�����ĺ���ע��
+详细函数说明请参考该类的函数注释
 
-ʹ�����ӣ�
+使用例子：
 ```
 import (
 	"log"
