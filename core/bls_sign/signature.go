@@ -11,12 +11,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"reflect"
+
+	bls12_381_ecc "github.com/consensys/gnark-crypto/ecc/bls12-381"
+	bls12_381_twisted "github.com/consensys/gnark-crypto/ecc/bls12-381/twistededwards"
 
 	"github.com/xuperchain/crypto/core/common"
 	"github.com/xuperchain/crypto/core/hash"
+)
 
-	"github.com/cloudflare/bn256"
+var (
+	g1Gen bls12_381_ecc.G1Affine
+	g2Gen bls12_381_ecc.G2Affine
 )
 
 type PrivateKey struct {
@@ -24,7 +29,28 @@ type PrivateKey struct {
 }
 
 type PublicKey struct {
-	P *bn256.G2
+	P *bls12_381_ecc.G2Affine
+}
+
+func init() {
+	_, _, g1Gen, g2Gen = bls12_381_ecc.Generators()
+}
+
+// generate BLS private and public key pair
+func GenerateKeyPair() (*PrivateKey, *PublicKey, error) {
+	// generate a random point in G2
+	g2Order := bls12_381_twisted.GetEdwardsCurve().Order
+	sk, err := rand.Int(rand.Reader, &g2Order)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pk := new(bls12_381_ecc.G2Affine).ScalarMultiplication(&g2Gen, sk)
+
+	priKey := &PrivateKey{X: sk}
+	pubKey := &PublicKey{P: pk}
+
+	return priKey, pubKey, nil
 }
 
 // BLS signature uses a particular function, defined as:
@@ -43,10 +69,9 @@ type PublicKey struct {
 //
 // It is true because of the pairing function described above:
 // e(P, H(m)) = e(pk*G, H(m)) = e(G, pk*H(m)) = e(G, S)
-//func Sign(privatekey *PrivateKey, msg string) (*bn256.G1, err error) {
-func Sign(privatekey *PrivateKey, msg []byte) (blsSignature []byte, err error) {
+func Sign(privateKey *PrivateKey, msg []byte) (blsSignature []byte, err error) {
 	hPoint := hashToG1(msg)
-	sig := new(bn256.G1).ScalarMult(hPoint, privatekey.X)
+	sig := new(bls12_381_ecc.G1Affine).ScalarMultiplication(hPoint, privateKey.X)
 
 	blsSig := &common.BlsSignature{
 		S: sig.Marshal(),
@@ -76,46 +101,41 @@ func Sign(privatekey *PrivateKey, msg []byte) (blsSignature []byte, err error) {
 	//	return sig, nil
 }
 
-func GenerateKeyPair() (*PrivateKey, *PublicKey) {
-	sk, pk, _ := bn256.RandomG2(rand.Reader)
-
-	priKey := &PrivateKey{X: sk}
-	pubKey := &PublicKey{P: pk}
-
-	return priKey, pubKey
-}
-
-//func Verify(publicKey *PublicKey, sig *bn256.G1, msg []byte) (bool, error) {
 func Verify(publicKey *PublicKey, sig, msg []byte) (bool, error) {
 	signature := new(common.BlsSignature)
-	err := json.Unmarshal(sig, signature)
-	if err != nil {
-		return false, fmt.Errorf("Failed unmashalling bls signature [%s]", err)
+	if err := json.Unmarshal(sig, signature); err != nil {
+		return false, fmt.Errorf("failed unmashalling bls signature [%s]", err)
 	}
 
-	sigPointG1 := new(bn256.G1).ScalarBaseMult(big.NewInt(1))
-	sigPointG1.Unmarshal(signature.S)
-
-	generatePointG2 := new(bn256.G2).ScalarBaseMult(big.NewInt(1))
-	hashPointG1 := hashToG1(msg)
+	sigPointG1 := new(bls12_381_ecc.G1Affine)
+	if err := sigPointG1.Unmarshal(signature.S); err != nil {
+		return false, err
+	}
 
 	// e(G, S) = e(S, G)
-	lp := bn256.Pair(sigPointG1, generatePointG2)
+	lp, err := bls12_381_ecc.Pair([]bls12_381_ecc.G1Affine{*sigPointG1}, []bls12_381_ecc.G2Affine{g2Gen})
+	if err != nil {
+		return false, err
+	}
 
 	// e(P, H(m)) = e(H(m), P)
-	rp := bn256.Pair(hashPointG1, publicKey.P)
+	hashPointG1 := hashToG1(msg)
+	rp, err := bls12_381_ecc.Pair([]bls12_381_ecc.G1Affine{*hashPointG1}, []bls12_381_ecc.G2Affine{*publicKey.P})
+	if err != nil {
+		return false, err
+	}
 
 	// check whether e(G, S) equals e(P, H(m)) or not
 	// if sig is valid, then e(P, H(m)) = e(pk*G, H(m)) = e(G, pk*H(m)) = e(G, S)
-	isEqual := reflect.DeepEqual(lp.Marshal(), rp.Marshal())
+	isEqual := lp.Equal(&rp)
 
 	return isEqual, nil
 }
 
-func hashToG1(msg []byte) *bn256.G1 {
+func hashToG1(msg []byte) *bls12_381_ecc.G1Affine {
 	// hash a msg to a point of G1
 	k := hash.HashUsingSha256(msg)
 	intK := new(big.Int).SetBytes(k)
 
-	return new(bn256.G1).ScalarBaseMult(intK)
+	return new(bls12_381_ecc.G1Affine).ScalarMultiplication(&g1Gen, intK)
 }

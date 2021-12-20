@@ -1,27 +1,44 @@
 package sha256
 
 import (
+	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend"
 	"github.com/consensys/gnark/frontend"
-	//	"github.com/consensys/gurvy"
+
 	"github.com/xuperchain/crypto/core/zkp/zk_snark/gadgets/hash/sha256"
 )
 
-// New return the circuit implementing
-// a pre image check
-func NewCircuit() *frontend.CS {
-	// create root constraint system
-	circuit := frontend.New()
+// Circuit defines a pre-image knowledge proof
+// SHA256(secret preImage) = public hash
+type SHA256Circuit struct {
+	// struct tag on a variable is optional
+	// default uses variable name and secret visibility.
+	PreImage frontend.Variable
+	Hash     frontend.Variable `gnark:",public"`
+}
 
-	// declare secret and public inputs
-	preInput := circuit.SECRET_INPUT("secret_msg")
-	hash := circuit.PUBLIC_INPUT("hash")
-
+// Define declares the circuit's constraints
+// Hash = SHA256(PreImage)
+func (circuit *SHA256Circuit) Define(curveID ecc.ID, api frontend.API) error {
 	// hash function
-	//	mimc, _ := mimc.NewMiMCGadget("seed", gurvy.BN256)
-	sha256Hash := sha256.NewSHA256Gadget()
+	sha256, _ := sha256.NewSHA256("seed", curveID, api)
 
 	// specify constraints
-	circuit.MUSTBE_EQ(hash, sha256Hash.Hash(&circuit, preInput))
+	// SHA256(preImage) == hash
+	sha256.Write(circuit.PreImage)
+	api.AssertIsEqual(circuit.Hash, sha256.Sum())
+	return nil
+}
 
-	return &circuit
+// NewCircuit return the circuit implementing a pre image check
+func NewCircuit() (frontend.CompiledConstraintSystem, error) {
+	circuit := &SHA256Circuit{}
+
+	// generate CompiledConstraintSystem
+	ccs, err := frontend.Compile(ecc.BLS12_381, backend.GROTH16, circuit, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return ccs, nil
 }

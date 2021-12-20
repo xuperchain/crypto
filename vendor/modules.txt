@@ -1,40 +1,76 @@
-# github.com/cloudflare/bn256 v0.0.0-20200818021822-8aba7cd1ae4c
-github.com/cloudflare/bn256
-# github.com/consensys/gnark v0.2.1-alpha
+# github.com/consensys/gnark v0.5.2
 github.com/consensys/gnark/backend
-github.com/consensys/gnark/backend/bn256
-github.com/consensys/gnark/backend/bn256/groth16
-github.com/consensys/gnark/crypto/hash/mimc/bls377
-github.com/consensys/gnark/crypto/hash/mimc/bls381
-github.com/consensys/gnark/crypto/hash/mimc/bn256
+github.com/consensys/gnark/backend/groth16
+github.com/consensys/gnark/backend/hint
+github.com/consensys/gnark/examples/mimc
 github.com/consensys/gnark/frontend
-github.com/consensys/gnark/gadgets
-github.com/consensys/gnark/gadgets/hash/mimc
-github.com/consensys/gnark/internal/utils/debug
-github.com/consensys/gnark/internal/utils/parallel
-# github.com/consensys/gurvy v0.1.2-0.20200512111154-1662e289e29b
-github.com/consensys/gurvy
-github.com/consensys/gurvy/bls377/fr
-github.com/consensys/gurvy/bls381/fr
-github.com/consensys/gurvy/bn256
-github.com/consensys/gurvy/bn256/fp
-github.com/consensys/gurvy/bn256/fr
-github.com/consensys/gurvy/utils
-github.com/consensys/gurvy/utils/debug
-github.com/consensys/gurvy/utils/parallel
-# github.com/davecgh/go-spew v1.1.1
-github.com/davecgh/go-spew/spew
-# github.com/pmezard/go-difflib v1.0.0
-github.com/pmezard/go-difflib/difflib
-# github.com/stretchr/testify v1.5.1
-github.com/stretchr/testify/assert
-github.com/stretchr/testify/require
-# golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
-golang.org/x/crypto/hkdf
+github.com/consensys/gnark/internal/backend/bls12-377/cs
+github.com/consensys/gnark/internal/backend/bls12-377/groth16
+github.com/consensys/gnark/internal/backend/bls12-377/witness
+github.com/consensys/gnark/internal/backend/bls12-381/cs
+github.com/consensys/gnark/internal/backend/bls12-381/groth16
+github.com/consensys/gnark/internal/backend/bls12-381/witness
+github.com/consensys/gnark/internal/backend/bls24-315/cs
+github.com/consensys/gnark/internal/backend/bls24-315/groth16
+github.com/consensys/gnark/internal/backend/bls24-315/witness
+github.com/consensys/gnark/internal/backend/bn254/cs
+github.com/consensys/gnark/internal/backend/bn254/groth16
+github.com/consensys/gnark/internal/backend/bn254/witness
+github.com/consensys/gnark/internal/backend/bw6-761/cs
+github.com/consensys/gnark/internal/backend/bw6-761/groth16
+github.com/consensys/gnark/internal/backend/bw6-761/witness
+github.com/consensys/gnark/internal/backend/compiled
+github.com/consensys/gnark/internal/backend/ioutils
+github.com/consensys/gnark/internal/parser
+github.com/consensys/gnark/internal/utils
+github.com/consensys/gnark/io
+github.com/consensys/gnark/std/hash/mimc
+# github.com/consensys/gnark-crypto v0.5.3
+github.com/consensys/gnark-crypto/ecc
+github.com/consensys/gnark-crypto/ecc/bls12-377
+github.com/consensys/gnark-crypto/ecc/bls12-377/fp
+github.com/consensys/gnark-crypto/ecc/bls12-377/fr
+github.com/consensys/gnark-crypto/ecc/bls12-377/fr/fft
+github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bls12-377/internal/fptower
+github.com/consensys/gnark-crypto/ecc/bls12-381
+github.com/consensys/gnark-crypto/ecc/bls12-381/fp
+github.com/consensys/gnark-crypto/ecc/bls12-381/fr
+github.com/consensys/gnark-crypto/ecc/bls12-381/fr/fft
+github.com/consensys/gnark-crypto/ecc/bls12-381/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bls12-381/internal/fptower
+github.com/consensys/gnark-crypto/ecc/bls12-381/twistededwards
+github.com/consensys/gnark-crypto/ecc/bls24-315
+github.com/consensys/gnark-crypto/ecc/bls24-315/fp
+github.com/consensys/gnark-crypto/ecc/bls24-315/fr
+github.com/consensys/gnark-crypto/ecc/bls24-315/fr/fft
+github.com/consensys/gnark-crypto/ecc/bls24-315/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bls24-315/internal/fptower
+github.com/consensys/gnark-crypto/ecc/bn254
+github.com/consensys/gnark-crypto/ecc/bn254/fp
+github.com/consensys/gnark-crypto/ecc/bn254/fr
+github.com/consensys/gnark-crypto/ecc/bn254/fr/fft
+github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bn254/internal/fptower
+github.com/consensys/gnark-crypto/ecc/bw6-633/fr
+github.com/consensys/gnark-crypto/ecc/bw6-633/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bw6-761
+github.com/consensys/gnark-crypto/ecc/bw6-761/fp
+github.com/consensys/gnark-crypto/ecc/bw6-761/fr
+github.com/consensys/gnark-crypto/ecc/bw6-761/fr/fft
+github.com/consensys/gnark-crypto/ecc/bw6-761/fr/mimc
+github.com/consensys/gnark-crypto/ecc/bw6-761/internal/fptower
+github.com/consensys/gnark-crypto/field
+github.com/consensys/gnark-crypto/hash
+github.com/consensys/gnark-crypto/internal/generator/config
+github.com/consensys/gnark-crypto/internal/parallel
+# github.com/fxamacker/cbor/v2 v2.2.0
+github.com/fxamacker/cbor/v2
+# github.com/x448/float16 v0.8.4
+github.com/x448/float16
+# golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/ripemd160
 golang.org/x/crypto/sha3
-# golang.org/x/sys v0.0.0-20200806125547-5acd03effb82
+# golang.org/x/sys v0.0.0-20210420205809-ac73e9fd8988
 golang.org/x/sys/cpu
-# gopkg.in/yaml.v2 v2.2.8
-gopkg.in/yaml.v2

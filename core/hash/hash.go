@@ -5,9 +5,8 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 
+	"github.com/consensys/gnark-crypto/hash"
 	"golang.org/x/crypto/ripemd160"
-
-	mimcBn256 "github.com/consensys/gnark/crypto/hash/mimc/bn256"
 )
 
 func HashUsingSha256(data []byte) []byte {
@@ -40,18 +39,9 @@ func HashUsingHmac512(data, key []byte) []byte {
 	return out
 }
 
-func HashUsingMiMC(data, seed []byte) []byte {
-	mimc := mimcBn256.NewMiMC(string(seed))
-	mimc.Write(data)
-	out := mimc.Sum(nil)
-
-	return out
-}
-
 func HashUsingDefaultMiMC(data []byte) []byte {
-	mimc := mimcBn256.NewMiMC("seed")
-	mimc.Write(data)
-	out := mimc.Sum(nil)
-
-	return out
+	hashFunc := hash.MIMC_BLS12_381
+	goMimc := hashFunc.New("seed")
+	goMimc.Write(data)
+	return goMimc.Sum(nil)
 }
