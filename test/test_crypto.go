@@ -279,7 +279,11 @@ func main() {
 	//--- private key split end ---
 
 	// --- zkp start ---
-	zkpInfo := xcc.ZkpSetupMiMC()
+	zkpInfo, err := xcc.ZkpSetupMiMC()
+	if err != nil {
+		log.Printf("ZkpSetupMiMC failed and err is: %v", err)
+		return
+	}
 	secretMsg := []byte("test for zkp")
 	proof, err := xcc.ZkpProveMiMC(zkpInfo.R1CS, zkpInfo.ProvingKey, secretMsg)
 	if err != nil {
@@ -290,10 +294,10 @@ func main() {
 
 	hashResult = xcc.HashUsingDefaultMiMC(secretMsg)
 	verifyResult, err := xcc.ZkpVerifyMiMC(proof, zkpInfo.VerifyingKey, hashResult)
-	log.Printf("verifyResult proof is: %v and err is: %v", verifyResult, err)
+	log.Printf("ZkpVerifyMiMC result is: %v and err is: %v", verifyResult, err)
 
 	verifyResult, err = xcc.ZkpVerifyMiMC(proof, zkpInfo.VerifyingKey, []byte("test2 for zkp"))
-	log.Printf("verifyResult proof is: %v and err is: %v", verifyResult, err)
+	log.Printf("ZkpVerifyMiMC with wrong message, result is: %v and err is: %v", verifyResult, err)
 
 	// --- zkp end ---
 
@@ -722,7 +726,11 @@ func main() {
 	// --- 验证BLS签名 start ---
 
 	// 生成BLS密钥对
-	privateKeyBLS, publicKeyBLS := xcc.GenerateBlsKeyPair()
+	privateKeyBLS, publicKeyBLS, err := xcc.GenerateBlsKeyPair()
+	if err != nil {
+		log.Printf("GenerateBlsKeyPair failed and err is: %v", err)
+		return
+	}
 
 	// 验证BLS签名算法
 	blsSig, err := xcc.SignBls(privateKeyBLS, msg)
@@ -731,7 +739,7 @@ func main() {
 	isSignatureMatch, err = xcc.VerifyBlsSig(publicKeyBLS, blsSig, msg)
 	log.Printf("Verifying & Unmashalling BLS signature, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
 
-	_, publicKeyBLS2 := xcc.GenerateBlsKeyPair()
+	_, publicKeyBLS2, _ := xcc.GenerateBlsKeyPair()
 	isSignatureMatch, err = xcc.VerifyBlsSig(publicKeyBLS2, blsSig, msg)
 	log.Printf("Verifying & Unmashalling BLS signature using publicKeyBLS2, isSignatureMatch is %v and err is %v", isSignatureMatch, err)
 

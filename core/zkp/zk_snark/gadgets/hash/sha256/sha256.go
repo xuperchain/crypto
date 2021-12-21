@@ -1,51 +1,49 @@
-/*
-Copyright © 2020 ConsenSys
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package sha256
 
 import (
-	//	"math/big"
+	"math/big"
 
+	"github.com/consensys/gnark-crypto/ecc"
 	"github.com/consensys/gnark/frontend"
-	//	"github.com/consensys/gnark/gadgets"
-	//	"github.com/consensys/gurvy"
 )
 
-// SHA256Gadget contains the params of the Mimc gadget and the curves on which it is implemented
-type SHA256Gadget struct {
-	//	Params []big.Int
-	//	id     gurvy.ID
+// SHA256 contains the params of the SHA256 hash func and the curves on which it is implemented
+type SHA256 struct {
+	params []big.Int           // slice containing constants for the encryption rounds
+	id     ecc.ID              // id needed to know which encryption function to use
+	h      frontend.Variable   // current vector in the Miyaguchi–Preneel scheme
+	data   []frontend.Variable // state storage. data is updated when Write() is called. Sum sums the data.
+	api    frontend.API        // underlying constraint system
 }
 
-// NewMiMCGadget returns a MiMC gadget, than can be used in a circuit
-func NewSHA256Gadget() SHA256Gadget {
-	return SHA256Gadget{}
+// NewSHA256 returns a SHA256 instance, than can be used in a gnark circuit
+func NewSHA256(seed string, id ecc.ID, api frontend.API) (SHA256, error) {
+	// only support bls381 currently
+	return newSHA256BLS381(seed, api), nil
+}
+
+// Write adds more data to the running hash.
+func (h *SHA256) Write(data ...frontend.Variable) {
+	h.data = append(h.data, data...)
+}
+
+// Reset resets the Hash to its initial state.
+func (h *SHA256) Reset() {
+	h.data = nil
+	h.h = h.api.Constant(0)
 }
 
 // Hash hash (in r1cs form) using Miyaguchi–Preneel:
 // https://en.wikipedia.org/wiki/One-way_compression_function
-// The XOR operation is replaced by field addition
-func (h MiMCGadget) Hash(circuit *frontend.CS, data ...*frontend.Constraint) *frontend.Constraint {
-	digest := circuit.ALLOCATE(0)
-
-	for _, stream := range data {
-		digest = encryptFuncs(circuit, h, stream, digest)
-		digest = circuit.ADD(digest, stream)
+// The XOR operation is replaced by field addition.
+// See github.com/consensys/gnark-crypto for reference implementation.
+func (h *SHA256) Sum() frontend.Variable {
+	for _, stream := range h.data {
+		h.h = encryptBLS381(h.api, *h, stream, h.h)
+		h.h = h.api.Add(h.h, stream)
 	}
 
-	return digest
+	h.data = nil // flush the data already hashed
 
+	return h.h
 }

@@ -14,469 +14,439 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package frontend contains Constraint System representation and R1CS to be used with zero knowledge proof systems in gnark
 package frontend
 
 import (
 	"errors"
-	"fmt"
+	"io"
 	"math/big"
+	"sort"
 	"strconv"
+	"strings"
 
-	"github.com/consensys/gnark/backend"
-	"github.com/consensys/gnark/internal/utils/debug"
+	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark/backend/hint"
+	"github.com/consensys/gnark/internal/backend/compiled"
 )
 
-var (
-	ErrInconsistantConstraint = errors.New("inconsistant constraint")
-)
+// constraintSystem represents a Groth16 like circuit
+//
+// All the APIs to define a circuit (see Circuit.Define) like Add, Sub, Mul, ...
+// may take as input interface{}
+//
+// these interfaces are either Variables (/LinearExpressions) or constants (big.Int, strings, uint, fr.Element)
+type constraintSystem struct {
+	// Variables (aka wires)
+	// virtual variables do not result in a new circuit wire
+	// they may only contain a linear expression
+	public, secret    inputs
+	internal, virtual variables
 
-// CS Constraint System
-type CS struct {
+	// list of constraints in the form a * b == c
+	// a,b and c being linear expressions
+	constraints []compiled.R1C
 
-	// under the key i are all the expressions that must be equal to a single wire
-	Constraints map[uint64]*Constraint
+	// Coefficients in the constraints
+	coeffs         []big.Int      // list of unique coefficients.
+	coeffsIDsLarge map[string]int // map to check existence of a coefficient (key = coeff.Bytes())
+	coeffsIDsInt64 map[int64]int  // map to check existence of a coefficient (key = int64 value)
 
-	// constraints yielding multiple outputs (eg unpacking)
-	MOConstraints []moExpression
+	// Hints
+	mHints            map[int]compiled.Hint // solver hints
+	mHintsConstrained map[int]bool          // marks hints variables constrained status
 
-	// constraints yielding no outputs (eg boolean constraints)
-	NOConstraints []expression
+	logs      []compiled.LogEntry // list of logs to be printed when solving a circuit. The logs are called with the method Println
+	debugInfo []compiled.LogEntry // list of logs storing information about R1C
 
-	// keep track of the number of constraints (ensure each constraint has a unique ID)
-	nbConstraints uint64
+	mDebug map[int]int // maps constraint ID to debugInfo id
+
+	curveID ecc.ID
 }
 
-// New returns a new constraint system
-func New() CS {
-	// initialize constraint system
-	cs := CS{
-		Constraints: make(map[uint64]*Constraint),
+type variables struct {
+	variables []Variable
+	booleans  map[int]struct{} // keep track of boolean variables (we constrain them once)
+}
+
+type inputs struct {
+	variables
+	names []string
+}
+
+func (v *inputs) new(cs *constraintSystem, visibility compiled.Visibility, name string) Variable {
+	v.names = append(v.names, name)
+	return v.variables.new(cs, visibility)
+}
+
+func (v *variables) new(cs *constraintSystem, visibility compiled.Visibility) Variable {
+	idx := len(v.variables)
+	variable := Variable{visibility: visibility, id: idx, linExp: cs.LinearExpression(compiled.Pack(idx, compiled.CoeffIdOne, visibility))}
+
+	v.variables = append(v.variables, variable)
+	return variable
+}
+
+// CompiledConstraintSystem ...
+type CompiledConstraintSystem interface {
+	io.WriterTo
+	io.ReaderFrom
+
+	// GetNbVariables return number of internal, secret and public variables
+	GetNbVariables() (internal, secret, public int)
+	GetNbConstraints() int
+	GetNbCoefficients() int
+
+	CurveID() ecc.ID
+	FrSize() int
+
+	// ToHTML generates a human readable representation of the constraint system
+	ToHTML(w io.Writer) error
+}
+
+// initialCapacity has quite some impact on frontend performance, especially on large circuits size
+// we may want to add build tags to tune that
+func newConstraintSystem(curveID ecc.ID, initialCapacity ...int) constraintSystem {
+	capacity := 0
+	if len(initialCapacity) > 0 {
+		capacity = initialCapacity[0]
+	}
+	cs := constraintSystem{
+		coeffs:            make([]big.Int, 4),
+		coeffsIDsLarge:    make(map[string]int),
+		coeffsIDsInt64:    make(map[int64]int, 4),
+		constraints:       make([]compiled.R1C, 0, capacity),
+		mDebug:            make(map[int]int),
+		mHints:            make(map[int]compiled.Hint),
+		mHintsConstrained: make(map[int]bool),
 	}
 
-	// The first constraint corresponds to the declaration of
-	// the unconstrained precomputed wire equal to 1
-	oneConstraint := &Constraint{
-		outputWire: &wire{
-			Name:         backend.OneWire,
-			WireID:       -1,
-			ConstraintID: -1,
-			IsConsumed:   true, // if false it means it is the last wire of the computational graph
-			Tags:         []string{},
-		},
-	}
+	cs.coeffs[compiled.CoeffIdZero].SetInt64(0)
+	cs.coeffs[compiled.CoeffIdOne].SetInt64(1)
+	cs.coeffs[compiled.CoeffIdTwo].SetInt64(2)
+	cs.coeffs[compiled.CoeffIdMinusOne].SetInt64(-1)
 
-	cs.addConstraint(oneConstraint)
+	cs.coeffsIDsInt64[0] = compiled.CoeffIdZero
+	cs.coeffsIDsInt64[1] = compiled.CoeffIdOne
+	cs.coeffsIDsInt64[2] = compiled.CoeffIdTwo
+	cs.coeffsIDsInt64[-1] = compiled.CoeffIdMinusOne
+
+	cs.public.variables.variables = make([]Variable, 0)
+	cs.public.booleans = make(map[int]struct{})
+
+	cs.secret.variables.variables = make([]Variable, 0)
+	cs.secret.booleans = make(map[int]struct{})
+
+	cs.internal.variables = make([]Variable, 0, capacity)
+	cs.internal.booleans = make(map[int]struct{})
+
+	cs.virtual.variables = make([]Variable, 0)
+	cs.virtual.booleans = make(map[int]struct{})
+
+	// by default the circuit is given on public wire equal to 1
+	cs.public.variables.variables[0] = cs.newPublicVariable("one")
+
+	cs.curveID = curveID
 
 	return cs
 }
 
-func (cs *CS) addConstraint(c *Constraint) {
-	debug.Assert(c.constraintID == 0)
-	c.constraintID = cs.nbConstraints
-	cs.Constraints[c.constraintID] = c
-	cs.nbConstraints++
+// NewHint initialize a variable whose value will be evaluated in the Prover by the constraint
+// solver using the provided hint function
+// hint function is provided at proof creation time and must match the hintID
+// inputs must be either variables or convertible to big int
+// /!\ warning /!\
+// this doesn't add any constraint to the newly created wire
+// from the backend point of view, it's equivalent to a user-supplied witness
+// except, the solver is going to assign it a value, not the caller
+func (cs *constraintSystem) NewHint(f hint.Function, inputs ...interface{}) Variable {
+	// create resulting wire
+	r := cs.newInternalVariable()
+
+	// mark hint as unconstrained, for now
+	cs.mHintsConstrained[r.id] = false
+
+	// now we need to store the linear expressions of the expected input
+	// that will be resolved in the solver
+	hintInputs := make([]compiled.LinearExpression, len(inputs))
+
+	// ensure inputs are set and pack them in a []uint64
+	for i, in := range inputs {
+		t := cs.Constant(in)
+		hintInputs[i] = t.linExp.Clone() // TODO @gbotrel check that we need to clone here ?
+	}
+
+	// add the hint to the constraint system
+	cs.mHints[r.id] = compiled.Hint{ID: hint.UUID(f), Inputs: hintInputs}
+
+	return r
 }
 
-// MUL multiplies two constraints
-func (cs *CS) mul(c1, c2 *Constraint) *Constraint {
-
-	expression := &quadraticExpression{
-		left:      linearExpression{term{Wire: c1.outputWire, Coeff: bigOne()}},
-		right:     linearExpression{term{Wire: c2.outputWire, Coeff: bigOne()}},
-		operation: mul,
-	}
-
-	return newConstraint(cs, expression)
+// bitLen returns the number of bits needed to represent a fr.Element
+func (cs *constraintSystem) bitLen() int {
+	return cs.curveID.Info().Fr.Bits
 }
 
-// mulConstant multiplies by a constant
-func (cs *CS) mulConstant(c *Constraint, constant big.Int) *Constraint {
-	expression := &term{
-		Wire:      c.outputWire,
-		Coeff:     constant,
-		Operation: mul,
-	}
-	return newConstraint(cs, expression)
+func (cs *constraintSystem) one() Variable {
+	return cs.public.variables.variables[0]
 }
 
-// DIV divides two constraints (c1/c2)
-func (cs *CS) div(c1, c2 *Constraint) *Constraint {
-
-	expression := quadraticExpression{
-		left:      linearExpression{term{Wire: c2.outputWire, Coeff: bigOne()}},
-		right:     linearExpression{term{Wire: c1.outputWire, Coeff: bigOne()}},
-		operation: div,
-	}
-
-	return newConstraint(cs, &expression)
+// Term packs a variable and a coeff in a compiled.Term and returns it.
+func (cs *constraintSystem) makeTerm(v Variable, coeff *big.Int) compiled.Term {
+	return compiled.Pack(v.id, cs.coeffID(coeff), v.visibility)
 }
 
-// divConstantRight c1, c2 -> c1/c2, where the right (c2) is a constant
-func (cs *CS) divConstantRight(c1 *Constraint, c2 big.Int) *Constraint {
-
-	expression := quadraticExpression{
-		left:      linearExpression{term{Wire: cs.Constraints[0].outputWire, Coeff: c2}},
-		right:     linearExpression{term{Wire: c1.outputWire, Coeff: bigOne()}},
-		operation: div,
+// newR1C clones the linear expression associated with the variables (to avoid offseting the ID multiple time)
+// and return a R1C
+func newR1C(l, r, o Variable) compiled.R1C {
+	// interestingly, this is key to groth16 performance.
+	// l * r == r * l == o
+	// but the "l" linear expression is going to end up in the A matrix
+	// the "r" linear expression is going to end up in the B matrix
+	// the less variable we have appearing in the B matrix, the more likely groth16.Setup
+	// is going to produce infinity points in pk.G1.B and pk.G2.B, which will speed up proving time
+	if len(l.linExp) > len(r.linExp) {
+		l, r = r, l
 	}
 
-	return newConstraint(cs, &expression)
+	return compiled.R1C{L: l.linExp.Clone(), R: r.linExp.Clone(), O: o.linExp.Clone()}
 }
 
-// divConstantLeft c1, c2 -> c1/c2, where the left (c1) is a constant
-func (cs *CS) divConstantLeft(c1 big.Int, c2 *Constraint) *Constraint {
-
-	expression := quadraticExpression{
-		left:      linearExpression{term{Wire: c2.outputWire, Coeff: bigOne()}},
-		right:     linearExpression{term{Wire: cs.Constraints[0].outputWire, Coeff: c1}},
-		operation: div,
-	}
-
-	return newConstraint(cs, &expression)
+// NbConstraints enables circuit profiling and helps debugging
+// It returns the number of constraints created at the current stage of the circuit construction.
+func (cs *constraintSystem) NbConstraints() int {
+	return len(cs.constraints)
 }
 
-// inv (e*c1)**-1
-func (cs *CS) inv(c1 *Constraint, e big.Int) *Constraint {
-	expression := &term{
-		Wire:      c1.outputWire,
-		Coeff:     e,
-		Operation: div,
-	}
-	return newConstraint(cs, expression)
-}
-
-// ADD generic version for adding 2 constraints
-func (cs *CS) add(c1 *Constraint, c2 *Constraint) *Constraint {
-
-	expression := &linearExpression{
-		term{Wire: c1.outputWire, Coeff: bigOne()},
-		term{Wire: c2.outputWire, Coeff: bigOne()},
-	}
-
-	return newConstraint(cs, expression)
-}
-
-// ADDCST adds a constant to a variable
-func (cs *CS) addConstant(c *Constraint, constant big.Int) *Constraint {
-
-	expression := &linearExpression{
-		term{Wire: c.outputWire, Coeff: bigOne()},
-		term{Wire: cs.Constraints[0].outputWire, Coeff: constant},
-	}
-
-	return newConstraint(cs, expression)
-}
-
-// SUB generic version for substracting 2 constraints
-func (cs *CS) sub(c1 *Constraint, c2 *Constraint) *Constraint {
-
-	var minusOne big.Int
-	one := bigOne()
-	minusOne.Neg(&one)
-
-	expression := &linearExpression{
-		term{Wire: c1.outputWire, Coeff: one},
-		term{Wire: c2.outputWire, Coeff: minusOne},
-	}
-
-	return newConstraint(cs, expression)
-}
-
-func (cs *CS) subConstant(c *Constraint, constant big.Int) *Constraint {
-
-	var minusOne big.Int
-	one := bigOne()
-	minusOne.Neg((&constant))
-
-	expression := &linearExpression{
-		term{Wire: c.outputWire, Coeff: one},
-		term{Wire: cs.Constraints[0].outputWire, Coeff: minusOne},
-	}
-
-	return newConstraint(cs, expression)
-
-}
-
-func (cs *CS) subConstraint(constant big.Int, c *Constraint) *Constraint {
-
-	var minusOne big.Int
-	one := bigOne()
-	minusOne.Neg((&one))
-
-	expression := &linearExpression{
-		term{Wire: cs.Constraints[0].outputWire, Coeff: constant},
-		term{Wire: c.outputWire, Coeff: minusOne},
-	}
-
-	return newConstraint(cs, expression)
-
-}
-
-// divlc divides two linear combination of constraints
-func (cs *CS) divlc(num, den LinearCombination) *Constraint {
-
-	var left, right linearExpression
-	for _, t := range den {
-		left = append(left, term{Wire: t.Constraint.outputWire, Coeff: t.Coeff, Operation: mul})
-	}
-	for _, t := range num {
-		right = append(right, term{Wire: t.Constraint.outputWire, Coeff: t.Coeff, Operation: mul})
-	}
-
-	expression := &quadraticExpression{
-		left:      left,
-		right:     right,
-		operation: div,
-	}
-
-	return newConstraint(cs, expression)
-}
-
-// mullc multiplies two linear combination of constraints
-func (cs *CS) mullc(l1, l2 LinearCombination) *Constraint {
-	var left, right linearExpression
-	for _, t := range l1 {
-		left = append(left, term{Wire: t.Constraint.outputWire, Coeff: t.Coeff, Operation: mul})
-	}
-	for _, t := range l2 {
-		right = append(right, term{Wire: t.Constraint.outputWire, Coeff: t.Coeff, Operation: mul})
-	}
-
-	expression := &quadraticExpression{
-		left:  left,
-		right: right,
-	}
-
-	return newConstraint(cs, expression)
-}
-
-// equal equal constraints
-func (cs *CS) equal(c1, c2 *Constraint) error {
-
-	// ensure we're not doing v1.MUST_EQ(v1)
-	if c1 == c2 {
-		return fmt.Errorf("%w: %q", ErrInconsistantConstraint, "(user input 1 == user input 1) is invalid")
-	}
-
-	// ensure we are not doing x.MUST_EQ(y) , {x, y} being user inputs
-	if c1.outputWire != nil && c2.outputWire != nil {
-		if c1.outputWire.isUserInput() && c2.outputWire.isUserInput() {
-			return fmt.Errorf("%w: %q", ErrInconsistantConstraint, "(user input 1 == user input 2) is invalid")
-		}
-	}
-
-	// Since we copy c2's single wire into c1's, the order matters:
-	// if there is an input constraint, make sure it's c2's
-	if c2.outputWire != nil && c1.outputWire != nil {
-		if c1.outputWire.isUserInput() {
-			c2, c1 = c1, c2
-		}
-	}
-
-	// Merge C1 constraints with C2's into C1
-	c1.expressions = append(c1.expressions, c2.expressions...)
-
-	// put c2's single wire in c1's single wire
-	if c2.outputWire != nil && c1.outputWire != nil {
-		wireToReplace := c1.outputWire
-
-		c2.outputWire.Tags = append(c2.outputWire.Tags, c1.outputWire.Tags...)
-		c1.outputWire = c2.outputWire
-
-		// replace all occurences of c1's single wire in all expressions by c2's single wire
-		for _, c := range cs.Constraints {
-			for _, e := range c.expressions {
-				e.replaceWire(wireToReplace, c2.outputWire)
-			}
-		}
-		for _, moe := range cs.MOConstraints {
-			moe.replaceWire(wireToReplace, c2.outputWire)
-		}
-		for _, noe := range cs.NOConstraints {
-			noe.replaceWire(wireToReplace, c2.outputWire)
-		}
-	}
-
-	// delete C2 from the list
-	delete(cs.Constraints, c2.constraintID)
-
-	// c2.key = c1.key
-	*c2 = *c1
-
-	// update c1 in the Constraint System
-	cs.Constraints[c1.constraintID] = c1
-
-	return nil
-}
-
-// equalConstant Equal a constraint to a constant
-func (cs *CS) equalConstant(c *Constraint, constant big.Int) error {
-	// ensure we're not doing x.MUST_EQ(a), x being a user input
-	if c.outputWire.isUserInput() {
-		return fmt.Errorf("%w: %q", ErrInconsistantConstraint, "(user input == VALUE) is invalid")
-	}
-
-	c.expressions = append(c.expressions, &eqConstantExpression{v: constant})
-
-	return nil
-}
-
-func (cs *CS) mustBeLessOrEqConstant(a *Constraint, constant big.Int, nbBits int) error {
-
-	// TODO assumes fr is alaws 256 bit long, should this elsewhere
-	ci := make([]int, nbBits)
-
-	// query the decomposition of constant, ensuring it's 256 bits long (this constant should set elsewhere)
-	words := constant.Bits()
-	if len(words) < 4 {
-		for i := 0; i < 4-len(words); i++ {
-			words = append(words, big.Word(0))
-		}
-	}
-	nbWords := len(words)
-
-	for i := 0; i < nbWords; i++ {
-		for j := 0; j < 64; j++ {
-			// TODO fix me assumes big.Int.Word is 64 bits
-			ci[i*64+j] = int(uint64(words[i]) >> uint64(j) & uint64(1))
-		}
-	}
-
-	// unpacking the Constraint c
-	ai := cs.TO_BINARY(a, nbBits) // TODO assumes fr is alaws 256 bit long, should this elsewhere
-
-	// building the product (assume bit length is 257 so highest bit is set to 1 for the cst & the variable for consistancy comparison)
-	pi := make([]*Constraint, nbBits+1)
-	pi[nbBits] = cs.constVar(1)
-
-	// Setting the product
-	for i := nbBits - 1; i >= 0; i-- {
-		if ci[i] == 1 {
-			pi[i] = cs.MUL(pi[i+1], ai[i])
-		} else {
-			pi[i] = pi[i+1]
-		}
-	}
-
-	// constrain the bi
-	for i := nbBits - 1; i >= 0; i-- {
-		if ci[i] == 0 {
-			constraintRes := &implyExpression{b: pi[i+1].outputWire, a: ai[i].outputWire}
-			cs.NOConstraints = append(cs.NOConstraints, constraintRes)
-		} else {
-			cs.MUSTBE_BOOLEAN(ai[i])
-		}
-	}
-	return nil
-}
-
-func (cs *CS) mustBeLessOrEq(a *Constraint, c *Constraint, nbBits int) error {
-
-	// unpacking the constant bound c and the variable to test a
-	ci := cs.TO_BINARY(c, nbBits) // TODO assumes fr is alaws 256 bit long, should this elsewhere
-	ai := cs.TO_BINARY(a, nbBits)
-
-	// building the product (assume bit length is 257 so highest bit is set to 1 for the cst & the variable for consistancy comparison)
-	pi := make([]*Constraint, nbBits+1)
-	pi[nbBits] = cs.ALLOCATE(1)
-
-	//spi := "pi_"
-	sci := "ci_"
-
-	// Setting the product
-	for i := nbBits - 1; i >= 0; i-- {
-		ci[i].Tag(sci + strconv.Itoa(i))
-		pi[i] = cs.SELECT(ci[i], cs.MUL(pi[i+1], ai[i]), pi[i+1])
-		//pi[i].Tag(spi + strconv.Itoa(i))
-	}
-
-	// constrain the bi
-	zero := cs.ALLOCATE(0)
-	for i := nbBits - 1; i >= 0; i-- {
-		notci := cs.SUB(1, ci[i])
-		t1 := cs.MUL(notci, ai[i])
-		t2 := cs.SUB(1, pi[i+1])
-		lin1 := LinearCombination{
-			Term{t1, bigOne()},
-		}
-		lin2 := LinearCombination{
-			Term{cs.SUB(t2, ai[i]), bigOne()},
-		}
-		res := cs.MUL(lin1, lin2)
-		cs.MUSTBE_EQ(res, zero)
-	}
-	return nil
-}
-
-func (cs *CS) String() string {
-	res := ""
-	res += "SO constraints: \n"
-	res += "----------------\n"
-	for _, c := range cs.Constraints {
-		for _, e := range c.expressions {
-			res += e.string()
-			res += "="
-		}
-		res = res + c.outputWire.String() + "\n"
-	}
-	res += "\nMO constraints: \n"
-	res += "----------------\n"
-	for _, c := range cs.MOConstraints {
-		res += c.string()
-		res += "\n"
-	}
-	res += "\nNO constraints: \n"
-	res += "----------------\n"
-	for _, c := range cs.NOConstraints {
-		res += c.string()
-		res += "\n"
+// LinearExpression packs a list of compiled.Term in a compiled.LinearExpression and returns it.
+func (cs *constraintSystem) LinearExpression(terms ...compiled.Term) compiled.LinearExpression {
+	res := make(compiled.LinearExpression, len(terms))
+	for i, args := range terms {
+		res[i] = args
 	}
 	return res
 }
 
-func (cs *CS) registerNamedInput(name string) bool {
-	// checks if the name already exists
-	for _, c := range cs.Constraints {
-		if c.outputWire.Name == name {
+// reduces redundancy in linear expression
+// It factorizes variable that appears multiple times with != coeff Ids
+// To ensure the determinism in the compile process, variables are stored as public||secret||internal||unset
+// for each visibility, the variables are sorted from lowest ID to highest ID
+func (cs *constraintSystem) reduce(l compiled.LinearExpression) compiled.LinearExpression {
+	// ensure our linear expression is sorted, by visibility and by variable ID
+	if !sort.IsSorted(l) { // may not help
+		sort.Sort(l)
+	}
+
+	var c big.Int
+	for i := 1; i < len(l); i++ {
+		pcID, pvID, pVis := l[i-1].Unpack()
+		ccID, cvID, cVis := l[i].Unpack()
+		if pVis == cVis && pvID == cvID {
+			// we have redundancy
+			c.Add(&cs.coeffs[pcID], &cs.coeffs[ccID])
+			l[i-1].SetCoeffID(cs.coeffID(&c))
+			l = append(l[:i], l[i+1:]...)
+			i--
+		}
+	}
+	return l
+}
+
+func (cs *constraintSystem) coeffID64(v int64) int {
+	if resID, ok := cs.coeffsIDsInt64[v]; ok {
+		return resID
+	} else {
+		var bCopy big.Int
+		bCopy.SetInt64(v)
+		resID := len(cs.coeffs)
+		cs.coeffs = append(cs.coeffs, bCopy)
+		cs.coeffsIDsInt64[v] = resID
+		return resID
+	}
+}
+
+// coeffID tries to fetch the entry where b is if it exits, otherwise appends b to
+// the list of coeffs and returns the corresponding entry
+func (cs *constraintSystem) coeffID(b *big.Int) int {
+
+	// if the coeff is a int64 we have a fast path.
+	if b.IsInt64() {
+		return cs.coeffID64(b.Int64())
+	}
+
+	// GobEncode is 3x faster than b.Text(16). Slightly slower than Bytes, but Bytes return the same
+	// thing for -x and x .
+	bKey, _ := b.GobEncode()
+	key := string(bKey)
+
+	// if the coeff is already stored, fetch its ID from the cs.coeffsIDs map
+	if idx, ok := cs.coeffsIDsLarge[key]; ok {
+		return idx
+	}
+
+	// else add it in the cs.coeffs map and update the cs.coeffsIDs map
+	var bCopy big.Int
+	bCopy.Set(b)
+	resID := len(cs.coeffs)
+	cs.coeffs = append(cs.coeffs, bCopy)
+	cs.coeffsIDsLarge[key] = resID
+	return resID
+}
+
+func (cs *constraintSystem) addConstraint(r1c compiled.R1C, debugID ...int) {
+	cs.constraints = append(cs.constraints, r1c)
+	if len(debugID) > 0 {
+		cs.mDebug[len(cs.constraints)-1] = debugID[0]
+	}
+}
+
+// newInternalVariable creates a new wire, appends it on the list of wires of the circuit, sets
+// the wire's id to the number of wires, and returns it
+func (cs *constraintSystem) newInternalVariable() Variable {
+	return cs.internal.new(cs, compiled.Internal)
+}
+
+// newPublicVariable creates a new public variable
+func (cs *constraintSystem) newPublicVariable(name string) Variable {
+	return cs.public.new(cs, compiled.Public, name)
+}
+
+// newSecretVariable creates a new secret variable
+func (cs *constraintSystem) newSecretVariable(name string) Variable {
+	return cs.secret.new(cs, compiled.Secret, name)
+}
+
+// newVirtualVariable creates a new virtual variable
+// this will not result in a new wire in the constraint system
+// and just represents a linear expression
+func (cs *constraintSystem) newVirtualVariable() Variable {
+	return cs.virtual.new(cs, compiled.Virtual)
+}
+
+// markBoolean marks the variable as boolean and return true
+// if a constraint was added, false if the variable was already
+// constrained as a boolean
+func (cs *constraintSystem) markBoolean(v Variable) bool {
+	switch v.visibility {
+	case compiled.Internal:
+		if _, ok := cs.internal.booleans[v.id]; ok {
 			return false
 		}
+		cs.internal.booleans[v.id] = struct{}{}
+	case compiled.Secret:
+		if _, ok := cs.secret.booleans[v.id]; ok {
+			return false
+		}
+		cs.secret.booleans[v.id] = struct{}{}
+	case compiled.Public:
+		if _, ok := cs.public.booleans[v.id]; ok {
+			return false
+		}
+		cs.public.booleans[v.id] = struct{}{}
+	case compiled.Virtual:
+		if _, ok := cs.virtual.booleans[v.id]; ok {
+			return false
+		}
+		cs.virtual.booleans[v.id] = struct{}{}
+	default:
+		panic("not implemented")
 	}
 	return true
 }
 
-// constVar creates a new variable set to a prescribed value
-func (cs *CS) constVar(i1 interface{}) *Constraint {
-	// parse input
-	constant := backend.FromInterface(i1)
+// checkVariables perform post compilation checks on the variables
+//
+// 1. checks that all user inputs are referenced in at least one constraint
+// 2. checks that all hints are constrained
+func (cs *constraintSystem) checkVariables() error {
 
-	// if constant == 1, we return the ONE_WIRE
-	one := bigOne()
+	// TODO @gbotrel add unit test for that.
 
-	if constant.Cmp(&one) == 0 {
-		return cs.Constraints[0]
-	}
+	cptSecret := len(cs.secret.variables.variables)
+	cptPublic := len(cs.public.variables.variables) - 1
+	cptHints := len(cs.mHintsConstrained)
 
-	return newConstraint(cs, &eqConstantExpression{v: constant})
-}
+	secretConstrained := make([]bool, cptSecret)
+	publicConstrained := make([]bool, cptPublic+1)
+	publicConstrained[0] = true
 
-// util function to count the wires of a constraint system
-func (cs *CS) countWires() int {
-
-	var wires []*wire
-
-	for _, c := range cs.Constraints {
-		isCounted := false
-		for _, w := range wires {
-			if w == c.outputWire {
-				isCounted = true
+	// for each constraint, we check the linear expressions and mark our inputs / hints as constrained
+	processLinearExpression := func(l compiled.LinearExpression) {
+		for _, t := range l {
+			if t.CoeffID() == compiled.CoeffIdZero {
+				// ignore zero coefficient, as it does not constraint the variable
+				// though, we may want to flag that IF the variable doesn't appear else where
 				continue
 			}
-		}
-		if !isCounted {
-			wires = append(wires, c.outputWire)
+			visibility := t.VariableVisibility()
+			vID := t.VariableID()
+
+			switch visibility {
+			case compiled.Public:
+				if vID != 0 && !publicConstrained[vID] {
+					publicConstrained[vID] = true
+					cptPublic--
+				}
+			case compiled.Secret:
+				if !secretConstrained[vID] {
+					secretConstrained[vID] = true
+					cptSecret--
+				}
+			case compiled.Internal:
+				if b, ok := cs.mHintsConstrained[vID]; ok && !b {
+					cs.mHintsConstrained[vID] = true
+					cptHints--
+				}
+			}
 		}
 	}
+	for _, r1c := range cs.constraints {
+		processLinearExpression(r1c.L)
+		processLinearExpression(r1c.R)
+		processLinearExpression(r1c.O)
 
-	return len(wires)
+		if cptHints|cptSecret|cptPublic == 0 {
+			return nil // we can stop.
+		}
+
+	}
+
+	// something is a miss, we build the error string
+	var sbb strings.Builder
+	if cptSecret != 0 {
+		sbb.WriteString(strconv.Itoa(cptSecret))
+		sbb.WriteString(" unconstrained secret input(s):")
+		sbb.WriteByte('\n')
+		for i := 0; i < len(secretConstrained) && cptSecret != 0; i++ {
+			if !secretConstrained[i] {
+				sbb.WriteString(cs.secret.names[i])
+				sbb.WriteByte('\n')
+				cptSecret--
+			}
+		}
+		sbb.WriteByte('\n')
+	}
+
+	if cptPublic != 0 {
+		sbb.WriteString(strconv.Itoa(cptPublic))
+		sbb.WriteString(" unconstrained public input(s):")
+		sbb.WriteByte('\n')
+		for i := 0; i < len(publicConstrained) && cptPublic != 0; i++ {
+			if !publicConstrained[i] {
+				sbb.WriteString(cs.public.names[i])
+				sbb.WriteByte('\n')
+				cptPublic--
+			}
+		}
+		sbb.WriteByte('\n')
+	}
+
+	if cptHints != 0 {
+		sbb.WriteString(strconv.Itoa(cptHints))
+		sbb.WriteString(" unconstrained hints")
+		sbb.WriteByte('\n')
+		// TODO we may add more debug info here --> idea, in NewHint, take the debug stack, and store in the hint map some
+		// debugInfo to find where a hint was declared (and not constrained)
+	}
+	return errors.New(sbb.String())
+
 }

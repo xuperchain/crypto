@@ -12,6 +12,9 @@ import (
 	"crypto/rand"
 	"math/big"
 
+	bls12_381_groth16 "github.com/consensys/gnark/backend/groth16"
+	"github.com/consensys/gnark/frontend"
+
 	"github.com/xuperchain/crypto/client/service/base"
 	"github.com/xuperchain/crypto/common/account"
 	"github.com/xuperchain/crypto/core/bls_sign"
@@ -39,9 +42,6 @@ import (
 	aesUtil "github.com/xuperchain/crypto/core/aes"
 	hd "github.com/xuperchain/crypto/core/hdwallet/api"
 	walletRand "github.com/xuperchain/crypto/core/hdwallet/rand"
-
-	backend_bn256 "github.com/consensys/gnark/backend/bn256"
-	groth16_bn256 "github.com/consensys/gnark/backend/bn256/groth16"
 )
 
 type XchainCryptoClient struct {
@@ -76,8 +76,7 @@ func (xcc *XchainCryptoClient) HashUsingRipemd160(data []byte) []byte {
 
 // 使用MiMC做哈希运算
 func (xcc *XchainCryptoClient) HashUsingDefaultMiMC(data []byte) []byte {
-	hashResult := hash.HashUsingDefaultMiMC(data)
-	return hashResult
+	return hash.HashUsingDefaultMiMC(data)
 }
 
 // --- 哈希算法相关 end ---
@@ -496,15 +495,15 @@ func (xcc *XchainCryptoClient) SecretRetrieve(shares map[int]*big.Int) ([]byte, 
 // --- 零知识证明算法相关 start ---
 
 // 初始化哈希算法MiMC的参数
-func (xcc *XchainCryptoClient) ZkpSetupMiMC() *zkp.ZkpInfo {
+func (xcc *XchainCryptoClient) ZkpSetupMiMC() (*zkp.ZkpInfo, error) {
 	return mimc.Setup()
 }
 
-func (xcc *XchainCryptoClient) ZkpProveMiMC(r1cs *backend_bn256.R1CS, pk *groth16_bn256.ProvingKey, secret []byte) (*groth16_bn256.Proof, error) {
-	return mimc.Prove(r1cs, pk, secret)
+func (xcc *XchainCryptoClient) ZkpProveMiMC(ccs frontend.CompiledConstraintSystem, pk bls12_381_groth16.ProvingKey, secret []byte) (bls12_381_groth16.Proof, error) {
+	return mimc.Prove(ccs, pk, secret)
 }
 
-func (xcc *XchainCryptoClient) ZkpVerifyMiMC(proof *groth16_bn256.Proof, vk *groth16_bn256.VerifyingKey, hashResult []byte) (bool, error) {
+func (xcc *XchainCryptoClient) ZkpVerifyMiMC(proof bls12_381_groth16.Proof, vk bls12_381_groth16.VerifyingKey, hashResult []byte) (bool, error) {
 	return mimc.Verify(proof, vk, hashResult)
 }
 
@@ -631,7 +630,7 @@ func (xcc *XchainCryptoClient) VerifyTssSig(key *ecdsa.PublicKey, signature, mes
 // --- BLS签名相关 start ---
 
 // BLS签名算法 生成公钥和私钥对
-func (xcc *XchainCryptoClient) GenerateBlsKeyPair() (*bls_sign.PrivateKey, *bls_sign.PublicKey) {
+func (xcc *XchainCryptoClient) GenerateBlsKeyPair() (*bls_sign.PrivateKey, *bls_sign.PublicKey, error) {
 	return bls_sign.GenerateKeyPair()
 }
 

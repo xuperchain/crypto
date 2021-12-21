@@ -1,0 +1,16 @@
+.svn
+.tmp
+.*.swp
+.*.swo
+.idea
+.project
+.download
+.DS_Store
+output
+address
+mnemonic
+private.key
+public.key
+ifile
+ofile
+*.pem

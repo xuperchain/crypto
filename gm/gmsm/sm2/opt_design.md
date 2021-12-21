@@ -63,15 +63,17 @@ Showing top 10 nodes out of 122
 **收益**：循环展开加上在[#1-使用64位整数类型存储大数](#1-使用64位整数进行计算)中提到的优化，可以使得SM2优化达到60%的性能提升。
 
 ### 3. AVX二路并行
-**思路**：参考论文[Parallel Implementation of SM2 Elliptic Curve Cryptography on Intel Processors with AVX2](https://link.springer.com/chapter/10.1007/978-3-030-55304-3_11)，这篇文章提到，在椭圆曲线上定义的点加（PointAdd）操作可以通过AVX实现部分的二路并行，即利用AVX指令同时进行两部分数据的相同操作。受此论文的启发，我们通过AVX指令实现了三个椭圆曲线操作：`sm2P256PointAdd`, `sm2P256PointDouble`以及`sm2P256PointAddMixed`的二路并行版本。
+**【待后续支持ARM再开源】**
 
-**问题**：即使Go在1.11版本之后支持添加了AVX512的支持，并且也支持了AVX以及AVX2的汇编指令（参考[Go wiki: AVX512](https://zchee.github.io/golang-wiki/AVX512/)），但是在Go中使用AVX仍然有很多局限性：
+**思路**：参考论文[Parallel Implementation of SM2 Elliptic Curve Cryptography on Intel Processors with AVX2](https://link.springer.com/chapter/10.1007/978-3-030-55304-3_11) ，这篇文章提到，在椭圆曲线上定义的点加（PointAdd）操作可以通过AVX实现部分的二路并行，即利用AVX指令同时进行两部分数据的相同操作。受此论文的启发，我们通过AVX指令实现了三个椭圆曲线操作：`sm2P256PointAdd`, `sm2P256PointDouble`以及`sm2P256PointAddMixed`的二路并行版本。
+
+**问题**：即使Go在1.11版本之后支持添加了AVX512的支持，并且也支持了AVX以及AVX2的汇编指令（参考[Go wiki: AVX512](https://zchee.github.io/golang-wiki/AVX512/) )，但是在Go中使用AVX仍然有很多局限性：
 1. Go无法支持所有的AVX系列指令，例如VPUNPCKLQDQ指令，Go的汇编器无法识别该指令。
-2. 不像C那样可以通过调用[intel intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html)就可以使用SIMD指令，目前要想在Go中使用SIMD指令仍然只能通过写汇编的方式来实现，这对程序的编写造成了很大的障碍。
-3. 开源社区中有用来更简便地生成Go汇编代码的开源库[avo](https://github.com/mmcloughlin/avo)，并且avo也支持SIMD指令的生成。虽然使用它能够快速生成汇编代码，但是这样生成出来的汇编代码的性能往往无法得到保证，很难达到编译器优化出来的汇编代码的性能。
-4. 开源社区中有使用CGO调用封装intel intrinsics的实现[go-avx](https://github.com/monochromegane/go-avx)，然而由于在当前的CGO机制中，Go->C的调用链开销就要占到60ns，显然这种调用AVX指令的方式所带来的损耗是完全无法接受的。
+2. 不像C那样可以通过调用[intel intrinsics](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html) 就可以使用SIMD指令，目前要想在Go中使用SIMD指令仍然只能通过写汇编的方式来实现，这对程序的编写造成了很大的障碍。
+3. 开源社区中有用来更简便地生成Go汇编代码的开源库[avo](https://github.com/mmcloughlin/avo) ，并且avo也支持SIMD指令的生成。虽然使用它能够快速生成汇编代码，但是这样生成出来的汇编代码的性能往往无法得到保证，很难达到编译器优化出来的汇编代码的性能。
+4. 开源社区中有使用CGO调用封装intel intrinsics的实现[go-avx](https://github.com/monochromegane/go-avx) ，然而由于在当前的CGO机制中，Go->C的调用链开销就要占到60ns，显然这种调用AVX指令的方式所带来的损耗是完全无法接受的。
 
-**实现**：我们通过开源项目[c2goasm](https://github.com/minio/c2goasm)，先在C中通过Intel intrinsics写好SIMD指令并且通过clang编译到汇编，然后使用c2goasm将clang生成的汇编代码翻译到plan9汇编（Go的汇编代码格式），最后在Go中调用生成的plan9汇编，以此来实现在Go中使用AVX指令。
+**实现**：我们通过开源项目[c2goasm](https://github.com/minio/c2goasm) ，先在C中通过Intel intrinsics写好SIMD指令并且通过clang编译到汇编，然后使用c2goasm将clang生成的汇编代码翻译到plan9汇编（Go的汇编代码格式），最后在Go中调用生成的plan9汇编，以此来实现在Go中使用AVX指令。
 在解决了如何在Go中使用AVX指令的问题之后，我们实现了`sm2P256Mul`和`sm2P256Square`的二路并行版本，并且通过调整算法顺序将`sm2P256PointAdd`, `sm2P256PointDouble`以及`sm2P256PointAddMixed`中所有的乘法和平方操作替换为了二路并行的版本，如下所示：
 ```Go
 func sm2P256PointDouble(x3, y3, z3, x, y, z *sm2P256FieldElement) {
@@ -142,7 +144,7 @@ BenchmarkPointAddNoneAVX-64                     53263878                23.34 ns
    ```
    它仅仅是为了判断z1的符号就将`sm2P256FieldElement`类型转换为`big.Int`类型，这显然是没有必要的，我们通过手动修改这个操作可以节省掉很多对`big.Int`类型的分配。
 
-2. 绕过Go的逃逸分析，参考自论文[Escape from Escape Analysis of Golang](https://ieeexplore.ieee.org/document/9276567)。Go语言的逃逸分析是比较激进的，在某些情况下，Go的逃逸分析会不必要的将一些栈变量分配到堆上，这会导致不必要的内存分配。我们通过如下的命令对Go文件进行编译可以输出Go的逃逸分析结果。
+2. 绕过Go的逃逸分析，参考自论文[Escape from Escape Analysis of Golang](https://ieeexplore.ieee.org/document/9276567) 。Go语言的逃逸分析是比较激进的，在某些情况下，Go的逃逸分析会不必要的将一些栈变量分配到堆上，这会导致不必要的内存分配。我们通过如下的命令对Go文件进行编译可以输出Go的逃逸分析结果。
     ```bash
     go build -gcflags "-m -m "
     ```

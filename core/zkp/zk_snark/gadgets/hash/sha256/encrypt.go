@@ -1,45 +1,17 @@
-/*
-Copyright © 2020 ConsenSys
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package sha256
 
 import (
-	"math/big"
-
 	"github.com/consensys/gnark/frontend"
 )
 
-// -------------------------------------------------------------------------------------------------
-// encryptions functions
-
-// encryptSHA256 of a mimc run expressed as r1cs
-func encryptSHA256(circuit *frontend.CS, h SHA256Gadget, message, key *frontend.Constraint) *frontend.Constraint {
-
+// TODO: execution of a SHA256 run expressed as r1cs
+func encryptBLS381(api frontend.API, h SHA256, message frontend.Variable, key frontend.Variable) frontend.Variable {
 	res := message
-
-	for i := 0; i < len(h.Params); i++ {
-		//for i := 0; i < 1; i++ {
-		tmp := circuit.ADD(res, key, h.Params[i])
-		// res = (res+k+c)^7
-		res = circuit.MUL(tmp, tmp)
-		res = circuit.MUL(res, tmp)
-		res = circuit.MUL(res, res)
-		res = circuit.MUL(res, tmp)
-	}
-	res = circuit.ADD(res, key)
 	return res
+}
 
+// newSHA256BLS381 creates new SHA256 object
+func newSHA256BLS381(seed string, api frontend.API) SHA256 {
+	res := SHA256{}
+	return res
 }
