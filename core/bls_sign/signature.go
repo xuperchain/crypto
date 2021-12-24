@@ -13,7 +13,7 @@ import (
 	"math/big"
 
 	bls12_381_ecc "github.com/consensys/gnark-crypto/ecc/bls12-381"
-	bls12_381_twisted "github.com/consensys/gnark-crypto/ecc/bls12-381/twistededwards"
+	bls12_381_fr "github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 
 	"github.com/xuperchain/crypto/core/common"
 	"github.com/xuperchain/crypto/core/hash"
@@ -39,8 +39,8 @@ func init() {
 // generate BLS private and public key pair
 func GenerateKeyPair() (*PrivateKey, *PublicKey, error) {
 	// generate a random point in G2
-	g2Order := bls12_381_twisted.GetEdwardsCurve().Order
-	sk, err := rand.Int(rand.Reader, &g2Order)
+	g2Order := bls12_381_fr.Modulus()
+	sk, err := rand.Int(rand.Reader, g2Order)
 	if err != nil {
 		return nil, nil, err
 	}
