@@ -10,7 +10,6 @@ endif
 
 all: build 
 export GO111MODULE=on
-export GOFLAGS=-mod=vendor
 export OUTPUT=./output/
 
 build:
