@@ -30,7 +30,7 @@ func (h *SHA256) Write(data ...frontend.Variable) {
 // Reset resets the Hash to its initial state.
 func (h *SHA256) Reset() {
 	h.data = nil
-	h.h = h.api.Constant(0)
+	h.h, _ = h.api.Compiler().ConstantValue(0)
 }
 
 // Hash hash (in r1cs form) using Miyaguchi–Preneel:
