@@ -41,7 +41,7 @@ func HashUsingHmac512(data, key []byte) []byte {
 
 func HashUsingDefaultMiMC(data []byte) []byte {
 	hashFunc := hash.MIMC_BLS12_381
-	goMimc := hashFunc.New("seed")
+	goMimc := hashFunc.New()
 	goMimc.Write(data)
 	return goMimc.Sum(nil)
 }

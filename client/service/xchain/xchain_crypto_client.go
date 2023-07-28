@@ -13,7 +13,7 @@ import (
 	"math/big"
 
 	bls12_381_groth16 "github.com/consensys/gnark/backend/groth16"
-	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/constraint"
 
 	"github.com/xuperchain/crypto/client/service/base"
 	"github.com/xuperchain/crypto/common/account"
@@ -499,7 +499,7 @@ func (xcc *XchainCryptoClient) ZkpSetupMiMC() (*zkp.ZkpInfo, error) {
 	return mimc.Setup()
 }
 
-func (xcc *XchainCryptoClient) ZkpProveMiMC(ccs frontend.CompiledConstraintSystem, pk bls12_381_groth16.ProvingKey, secret []byte) (bls12_381_groth16.Proof, error) {
+func (xcc *XchainCryptoClient) ZkpProveMiMC(ccs constraint.ConstraintSystem, pk bls12_381_groth16.ProvingKey, secret []byte) (bls12_381_groth16.Proof, error) {
 	return mimc.Prove(ccs, pk, secret)
 }
 
